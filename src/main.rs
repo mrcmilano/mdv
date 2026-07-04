@@ -142,9 +142,24 @@ fn restore_terminal() {
 struct TerminalGuard;
 
 impl TerminalGuard {
+    /// Steps run in the order the build plan specifies (alternate screen,
+    /// raw mode, hide cursor). If a step after the first one fails, the
+    /// terminal is left in a partially set-up state — no `TerminalGuard`
+    /// exists yet to restore it via `Drop`, and the panic hook isn't
+    /// installed yet either — so each such failure explicitly restores
+    /// before returning the error.
     fn enter() -> io::Result<Self> {
-        enable_raw_mode()?;
-        execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+
+        if let Err(e) = enable_raw_mode() {
+            restore_terminal();
+            return Err(e);
+        }
+
+        if let Err(e) = execute!(io::stdout(), Hide) {
+            restore_terminal();
+            return Err(e);
+        }
 
         let previous_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -166,12 +181,19 @@ impl Drop for TerminalGuard {
 /// The only place output is written to the terminal (build plan Section 4).
 /// `\r\n` (not `\n`) is required between lines: raw mode disables the
 /// newline-to-CRLF translation a cooked terminal normally performs, so a
-/// bare `\n` would move down without returning to column 0.
+/// bare `\n` would move down without returning to column 0. The separator is
+/// placed *between* lines, never after the last one: printing it after the
+/// last line pushes the cursor past the bottom row when the viewport is
+/// completely full, which triggers a terminal scroll and shifts the just-drawn
+/// content up by one line.
 fn draw(view: &view::ViewState) -> io::Result<()> {
     let mut stdout = io::stdout();
     queue!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
-    for line in view.visible_lines() {
-        queue!(stdout, Print(line), Print("\r\n"))?;
+    for (i, line) in view.visible_lines().iter().enumerate() {
+        if i > 0 {
+            queue!(stdout, Print("\r\n"))?;
+        }
+        queue!(stdout, Print(line))?;
     }
     stdout.flush()
 }
