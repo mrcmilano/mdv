@@ -13,6 +13,12 @@
 ```docs: update README with new setup instructions```
 ```chore: update dependencies```
 
+When a commit completes a plan task, append the task and issue reference inline
+in the subject, after the description: `feat: add TOC overlay (task 3, ref #42)`.
+For non-issue-driven work, omit the parenthetical entirely and use a plain
+Conventional Commit: `feat: add TOC overlay`. See AGENTS.md §1 step 4 for the
+per-task commit cadence.
+
 ---
 
 ## Branch Strategy
@@ -48,8 +54,12 @@ git checkout develop && git pull origin develop
 git checkout -b feature/my-change
 
 # 3. Work, then stage and commit
-git add -p                               # stage hunks interactively, not blindly
-git commit -m "Add concise description of change"
+# Human: stage hunks interactively to review what you commit.
+git add -p
+# Autonomous agent: interactive staging is not possible. Stage explicit,
+# intended paths instead — never `git add .` or `git add -A` blindly.
+git add path/to/changed_file.py path/to/other_file.py
+git commit -m "feat: add concise description of change"
 
 # 4. Push and open a draft PR targeting develop
 git push -u origin feature/my-change
@@ -67,6 +77,12 @@ git rebase origin/develop
 ```
 
 Prefer rebase over merge to keep history linear.
+
+**Solo-workflow rule:** rebase freely while the PR is still a draft — there are
+no reviewers whose inline comments could be displaced, so the "do not rewrite
+history" guard below does not yet apply. Once the PR is converted to
+ready-for-review (or any reviewer leaves an inline comment), stop rewriting
+history and follow *Responding to Review Feedback*.
 
 ---
 
@@ -206,14 +222,21 @@ This is the highest-consequence mistake in this document. **`git revert` is not 
 
 ### Description
 
-Every PR must include:
+Every PR body must include the following sections. When the PR is opened as a
+draft, also include the draft header block defined in AGENTS.md §2
+(`Plan: / Source: / Status: WIP`) above these sections — the two are
+complementary: the header carries machine-readable status and the plan pointer,
+the sections below carry the human-readable summary.
 
 ```
 ## What
 One or two sentences on what changed.
 
 ## Why
-The motivation or ticket reference (e.g. closes #42).
+The motivation or ticket reference. Do **not** write `closes #<N>` / `Closes #<N>`
+while the PR is a draft — a closing keyword auto-closes the issue on merge before
+the work is verified. Reference the issue as `ref #<N>` until the PR is converted
+to ready-for-review, then add `Closes #<N>` (see AGENTS.md §2).
 
 ## Notes for reviewer
 Anything non-obvious, risky, or worth extra scrutiny.
@@ -229,7 +252,7 @@ Anything non-obvious, risky, or worth extra scrutiny.
 ### Responding to Review Feedback
 
 - **Fix on the same branch** — push new commits, do not open a new PR.
-- **Do not rewrite history after reviewers have engaged** — no `rebase` or `push --force` once inline review comments exist.
+- **Do not rewrite history once review has begun** — no `rebase` or `push --force` after the PR is converted to ready-for-review or any inline review comment exists, whichever comes first. Before that point (draft stage), rebasing is fine — see *Keeping Your Branch Up to Date*.
 - If a comment is resolved, mark it resolved. If you disagree, reply with reasoning before closing it.
 
 ### Resolving Conflicts Before Merge
@@ -245,7 +268,7 @@ git push --force-with-lease origin feature/your-branch
 
 After pushing, leave a PR comment describing what conflicted and how it was resolved.
 
-→ For the full step-by-step procedure, stop conditions, and escalation rules: `docs/git-conflict-resolution-prompt.md`
+→ For the full step-by-step procedure, stop conditions, and escalation rules: `docs/git-conflict-resolution.md`
 
 ### CI Failures
 
