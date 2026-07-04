@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-1-phase1-skeleton`
 _Date:_ 2026-07-04
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #1
 _PR:_ #<pr-number>
 <!-- filled in after first push -->
@@ -81,7 +81,7 @@ included in Finish.
 
 ### Implementation
 - [ ] 0. Create branch `feature/issue-1-phase1-skeleton` from develop following docs/git-workflow.md
-- [ ] 1. Crate scaffolding: `Cargo.toml` with the 3 dependencies and release profile from Section 2, minimal `src/main.rs` with `#![forbid(unsafe_code)]` and an empty `fn main()`. `cargo build` and `cargo clippy -- -D warnings` clean.
+- [x] 1. Crate scaffolding: `Cargo.toml` with the 3 dependencies and release profile from Section 2, minimal `src/main.rs` with `#![forbid(unsafe_code)]` and an empty `fn main()`. `cargo build` and `cargo clippy -- -D warnings` clean.
 - [ ] 2. CLI parsing & validation: positional `<FILE>`, `--help`/`-h`, `--version`/`-V`; error cases (no arg, unknown flag, unreadable file, non-UTF-8 file) print the one-line stderr message from Section 3 and exit 1; `--help` prints usage + the Section 7 keybinding table to stdout and exits 0; `--version` prints `mdv <version>` via `CARGO_PKG_VERSION` and exits 0. Parsing logic in a testable function with unit tests for each case.
 - [ ] 3. `src/input.rs`: `KeyEvent -> Action` mapping for the Phase 1 scroll row decided in Open questions (line up/down, half-page up/down, top, bottom, quit). Unit tests covering every bound key and confirming unbound keys map to no-op.
 - [ ] 4. `src/view.rs`: minimal `ViewState` (scroll `offset`, raw lines, viewport height) with clamped scroll arithmetic (`max_offset = lines.len().saturating_sub(viewport_height)`, never negative). Unit tests for boundary conditions: empty file, single line, file shorter than viewport, scrolling past top/bottom.
