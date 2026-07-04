@@ -86,7 +86,7 @@ included in Finish.
 ## Tasks
 
 ### Implementation
-- [ ] 0. Create branch `feature/issue-1-phase1-skeleton` from develop following docs/git-workflow.md
+- [x] 0. Create branch `feature/issue-1-phase1-skeleton` from develop following docs/git-workflow.md
 - [x] 1. Crate scaffolding: `Cargo.toml` with the 3 dependencies and release profile from Section 2, minimal `src/main.rs` with `#![forbid(unsafe_code)]` and an empty `fn main()`. `cargo build` and `cargo clippy -- -D warnings` clean.
 - [x] 2. CLI parsing & validation: positional `<FILE>`, `--help`/`-h`, `--version`/`-V`; error cases (no arg, unknown flag, unreadable file, non-UTF-8 file) print the one-line stderr message from Section 3 and exit 1; `--help` prints usage + the Section 7 keybinding table to stdout and exits 0; `--version` prints `mdv <version>` via `CARGO_PKG_VERSION` and exits 0. Parsing logic in a testable function with unit tests for each case.
 - [x] 3. `src/input.rs`: `KeyEvent -> Action` mapping for the Phase 1 scroll row decided in Open questions (line up/down, half-page up/down, top, bottom, quit). Unit tests covering every bound key and confirming unbound keys map to no-op.
@@ -98,13 +98,17 @@ included in Finish.
       Verified via a pty-driven harness (this shell has no controlling terminal, so a real interactive session isn't directly reachable): spawned the real binary under a pseudo-TTY, sent raw key bytes, and inspected the output stream. Results: (1) scroll `j`/`G`/`g` moved the visible window correctly; (2) `q` and `Ctrl-C` both exited cleanly (code 0) with `LeaveAlternateScreen`/cursor-`Show` sequences present; (3) a temporarily-injected `panic!()` (behind an env var, reverted after the test — not part of the committed code) exited with code 101 and the terminal-restore escape sequences appeared in the output *before* the panic message, confirming the panic hook ordering; (4) piping stdout exits 1 with the exact Section 3 message.
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `cargo audit` (first successful build) — no advisories
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass (35 tests, `cargo test`)
+- [x] Run `cargo audit` (first successful build) — no advisories
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
+      2 FIX REQUIRED findings resolved (terminal-state leak on partial init
+      failure; full-viewport scroll bug in `draw()` — both verified fixed via
+      a pty + `pyte` terminal-emulation harness). 1 LOW finding deferred, see
+      below. Second pass: PASS.
+- [ ] Update `README.md` if affected — N/A, no `README.md` exists yet in this repo.
 - [ ] Convert draft PR to ready-for-review; add `Closes #1` to PR description;
       set this plan's `_Status:_` to `READY`
 - [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
@@ -114,3 +118,10 @@ included in Finish.
 
 ## Deferred findings
 <!-- populated after adversarial-review, if any LOW findings are deferred -->
+
+- **LOW — no `--` end-of-options marker in `parse_args`** (`src/main.rs`):
+  a file literally named `-foo.md` can never be opened; it is always parsed
+  as an unknown flag (`mdv: unknown option '-foo.md'`). Build plan Section 3
+  doesn't mention `--` handling or dash-prefixed filenames anywhere, and this
+  is a narrow edge case unlikely to matter in practice. Deferring rather than
+  adding unspecified CLI behavior.
