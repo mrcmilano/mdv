@@ -6,8 +6,15 @@ mod view;
 use std::env;
 use std::fs;
 use std::io;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+use crossterm::cursor::{Hide, Show};
+use crossterm::execute;
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 
 const USAGE: &str = "Usage: mdv <FILE>\n       mdv --help | -h\n       mdv --version | -V";
 
@@ -110,6 +117,63 @@ fn is_replaceable_control(c: char) -> bool {
     (0x00..=0x1F).contains(&code) || code == 0x7F || (0x80..=0x9F).contains(&code)
 }
 
+fn ensure_stdout_is_tty() -> Result<(), String> {
+    if io::stdout().is_terminal() {
+        Ok(())
+    } else {
+        Err("mdv: interactive viewer requires a terminal".to_string())
+    }
+}
+
+/// Leaves the alternate screen, shows the cursor, and disables raw mode.
+/// Idempotent and infallible from the caller's perspective (errors are
+/// swallowed): called both from the panic hook, where little can be done
+/// about a further failure, and from `TerminalGuard`'s `Drop`.
+fn restore_terminal() {
+    let _ = execute!(io::stdout(), Show, LeaveAlternateScreen);
+    let _ = disable_raw_mode();
+}
+
+/// RAII guard for the terminal lifecycle (build plan Section 4): entering
+/// installs a panic hook that restores the terminal *before* the panic
+/// message prints, then chains to the previously installed hook. Dropping
+/// the guard restores the terminal on every other exit path (normal return,
+/// `?` propagation, `std::process::exit` is NOT covered — this codebase
+/// never calls it).
+struct TerminalGuard;
+
+impl TerminalGuard {
+    fn enter() -> io::Result<Self> {
+        enable_raw_mode()?;
+        execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            restore_terminal();
+            previous_hook(info);
+        }));
+
+        Ok(TerminalGuard)
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        restore_terminal();
+    }
+}
+
+fn run(_config: RunConfig) -> Result<ExitCode, String> {
+    ensure_stdout_is_tty()?;
+    let _terminal = TerminalGuard::enter().map_err(|e| {
+        format!(
+            "mdv: failed to initialize terminal: {}",
+            clean_io_message(&e)
+        )
+    })?;
+    todo!("wired up once the event loop exists (task 7)")
+}
+
 fn main() -> ExitCode {
     let args = env::args().skip(1);
     match parse_args(args) {
@@ -121,9 +185,13 @@ fn main() -> ExitCode {
             println!("mdv {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Ok(Cli::Run(_config)) => {
-            todo!("wired up once the terminal lifecycle and event loop exist")
-        }
+        Ok(Cli::Run(config)) => match run(config) {
+            Ok(code) => code,
+            Err(message) => {
+                eprintln!("{message}");
+                ExitCode::FAILURE
+            }
+        },
         Err(message) => {
             eprintln!("{message}");
             ExitCode::FAILURE
