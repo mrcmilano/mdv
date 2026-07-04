@@ -1,3 +1,224 @@
 #![forbid(unsafe_code)]
 
-fn main() {}
+use std::env;
+use std::fs;
+use std::io;
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+const USAGE: &str = "Usage: mdv <FILE>\n       mdv --help | -h\n       mdv --version | -V";
+
+const KEYBINDINGS: &str = "\
+Keybindings (Normal mode):
+  j, Down                     scroll down 1 line
+  k, Up                       scroll up 1 line
+  d, PageDown, Space          scroll down half a screen
+  u, PageUp                   scroll up half a screen
+  g, Home                     go to top
+  G, End                      go to bottom
+  t                           toggle TOC overlay
+  /                           start search input
+  n / N                       next / previous search match
+  Esc                         close overlay / cancel search input / clear search highlights
+  q, Ctrl-C                   quit";
+
+// Fields become live once task 7 wires the event loop to consume them.
+#[allow(dead_code)]
+struct RunConfig {
+    path: PathBuf,
+    contents: String,
+}
+
+enum Cli {
+    Run(RunConfig),
+    Help,
+    Version,
+}
+
+/// Strips the platform-specific `" (os error N)"` suffix `io::Error`'s
+/// `Display` impl appends, so stderr output matches the one-line format
+/// in `docs/mdv-build-plan.md` Section 3 across platforms.
+fn clean_io_message(e: &io::Error) -> String {
+    let full = e.to_string();
+    match full.find(" (os error") {
+        Some(idx) => full[..idx].to_string(),
+        None => full,
+    }
+}
+
+fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
+    let mut path: Option<String> = None;
+    for arg in args {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(Cli::Help),
+            "--version" | "-V" => return Ok(Cli::Version),
+            _ if arg.starts_with('-') => {
+                return Err(format!("mdv: unknown option '{arg}'"));
+            }
+            _ => {
+                if path.is_some() {
+                    return Err(format!("mdv: unexpected argument '{arg}'"));
+                }
+                path = Some(arg);
+            }
+        }
+    }
+
+    let path = path.ok_or_else(|| "mdv: missing required argument <FILE>".to_string())?;
+    let path = PathBuf::from(path);
+
+    let bytes = fs::read(&path).map_err(|e| {
+        format!(
+            "mdv: cannot read '{}': {}",
+            path.display(),
+            clean_io_message(&e)
+        )
+    })?;
+
+    let contents = String::from_utf8(bytes)
+        .map_err(|_| format!("mdv: '{}' is not valid UTF-8", path.display()))?;
+
+    Ok(Cli::Run(RunConfig { path, contents }))
+}
+
+fn main() -> ExitCode {
+    let args = env::args().skip(1);
+    match parse_args(args) {
+        Ok(Cli::Help) => {
+            println!("{USAGE}\n\n{KEYBINDINGS}");
+            ExitCode::SUCCESS
+        }
+        Ok(Cli::Version) => {
+            println!("mdv {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Ok(Cli::Run(_config)) => {
+            todo!("wired up once the terminal lifecycle and event loop exist")
+        }
+        Err(message) => {
+            eprintln!("{message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    fn args(strs: &[&str]) -> Vec<String> {
+        strs.iter().map(|s| s.to_string()).collect()
+    }
+
+    struct TempFile {
+        path: PathBuf,
+    }
+
+    impl TempFile {
+        fn new(bytes: &[u8]) -> Self {
+            static COUNTER: AtomicU32 = AtomicU32::new(0);
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path =
+                env::temp_dir().join(format!("mdv-test-{}-{}-{n}.md", std::process::id(), n));
+            fs::write(&path, bytes).expect("write temp file");
+            TempFile { path }
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    #[test]
+    fn no_arguments_is_an_error() {
+        let err = parse_args(args(&[])).err().expect("expected error");
+        assert_eq!(err, "mdv: missing required argument <FILE>");
+    }
+
+    #[test]
+    fn unknown_flag_is_an_error() {
+        let err = parse_args(args(&["--bogus"]))
+            .err()
+            .expect("expected error");
+        assert_eq!(err, "mdv: unknown option '--bogus'");
+    }
+
+    #[test]
+    fn two_positional_arguments_is_an_error() {
+        let err = parse_args(args(&["a.md", "b.md"]))
+            .err()
+            .expect("expected error");
+        assert_eq!(err, "mdv: unexpected argument 'b.md'");
+    }
+
+    #[test]
+    fn help_long_flag() {
+        assert!(matches!(parse_args(args(&["--help"])), Ok(Cli::Help)));
+    }
+
+    #[test]
+    fn help_short_flag() {
+        assert!(matches!(parse_args(args(&["-h"])), Ok(Cli::Help)));
+    }
+
+    #[test]
+    fn version_long_flag() {
+        assert!(matches!(parse_args(args(&["--version"])), Ok(Cli::Version)));
+    }
+
+    #[test]
+    fn version_short_flag() {
+        assert!(matches!(parse_args(args(&["-V"])), Ok(Cli::Version)));
+    }
+
+    #[test]
+    fn flags_take_precedence_over_a_preceding_positional_argument() {
+        assert!(matches!(
+            parse_args(args(&["notes.md", "--help"])),
+            Ok(Cli::Help)
+        ));
+    }
+
+    #[test]
+    fn unreadable_file_is_an_error() {
+        let path = env::temp_dir().join("mdv-test-does-not-exist.md");
+        let _ = fs::remove_file(&path);
+        let err = parse_args(args(&[path.to_str().unwrap()]))
+            .err()
+            .expect("expected error");
+        assert_eq!(
+            err,
+            format!(
+                "mdv: cannot read '{}': No such file or directory",
+                path.display()
+            )
+        );
+    }
+
+    #[test]
+    fn non_utf8_file_is_an_error() {
+        let file = TempFile::new(&[0xff, 0xfe, 0x00, 0xff]);
+        let err = parse_args(args(&[file.path.to_str().unwrap()]))
+            .err()
+            .expect("expected error");
+        assert_eq!(
+            err,
+            format!("mdv: '{}' is not valid UTF-8", file.path.display())
+        );
+    }
+
+    #[test]
+    fn valid_file_parses_to_run() {
+        let file = TempFile::new(b"# Hello\n\nworld\n");
+        match parse_args(args(&[file.path.to_str().unwrap()])).expect("expected Ok") {
+            Cli::Run(config) => {
+                assert_eq!(config.path, file.path);
+                assert_eq!(config.contents, "# Hello\n\nworld\n");
+            }
+            _ => panic!("expected Cli::Run"),
+        }
+    }
+}
