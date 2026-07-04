@@ -84,6 +84,32 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     Ok(Cli::Run(RunConfig { path, contents }))
 }
 
+/// Security-critical sanitization (build plan Section 5), applied to the
+/// whole file text before it is split into lines: strips `\r`, replaces tabs
+/// with a single space, and replaces every other C0 control character, DEL,
+/// and C1 control with U+FFFD. `\n` is preserved as the line separator.
+/// Neutralizes escape-sequence injection — no other ANSI/OSC sequence in the
+/// source file survives to reach the terminal.
+#[allow(dead_code)]
+fn sanitize(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\r' => {}
+            '\n' => out.push('\n'),
+            '\t' => out.push(' '),
+            c if is_replaceable_control(c) => out.push('\u{FFFD}'),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn is_replaceable_control(c: char) -> bool {
+    let code = c as u32;
+    (0x00..=0x1F).contains(&code) || code == 0x7F || (0x80..=0x9F).contains(&code)
+}
+
 fn main() -> ExitCode {
     let args = env::args().skip(1);
     match parse_args(args) {
@@ -211,6 +237,47 @@ mod tests {
             err,
             format!("mdv: '{}' is not valid UTF-8", file.path.display())
         );
+    }
+
+    #[test]
+    fn sanitize_strips_carriage_returns() {
+        assert_eq!(sanitize("a\r\nb\rc"), "a\nbc");
+    }
+
+    #[test]
+    fn sanitize_preserves_newlines_as_line_separators() {
+        assert_eq!(sanitize("a\nb\nc"), "a\nb\nc");
+    }
+
+    #[test]
+    fn sanitize_replaces_tabs_with_a_single_space() {
+        assert_eq!(sanitize("a\tb\t\tc"), "a b  c");
+    }
+
+    #[test]
+    fn sanitize_replaces_other_c0_controls_with_replacement_char() {
+        assert_eq!(sanitize("a\u{0007}b\u{001b}c"), "a\u{FFFD}b\u{FFFD}c");
+    }
+
+    #[test]
+    fn sanitize_replaces_del_and_c1_controls_with_replacement_char() {
+        assert_eq!(
+            sanitize("a\u{007F}b\u{0080}c\u{009F}d"),
+            "a\u{FFFD}b\u{FFFD}c\u{FFFD}d"
+        );
+    }
+
+    #[test]
+    fn sanitize_neutralizes_esc_byte_followed_by_osc_52_sequence() {
+        // A raw ESC byte followed by an OSC 52 clipboard-write sequence —
+        // the primary escape-sequence-injection threat (Section 12).
+        let malicious = "before\u{001b}]52;c;BASE64DATA==\u{0007}after";
+        let sanitized = sanitize(malicious);
+        assert!(
+            !sanitized.contains('\u{001b}'),
+            "sanitized text must not contain a raw ESC byte"
+        );
+        assert!(!sanitized.as_bytes().contains(&0x1b));
     }
 
     #[test]
