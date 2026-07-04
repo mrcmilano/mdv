@@ -1,0 +1,13 @@
+# Rust build artifacts (Cargo.lock IS committed — see docs/mdv-build-plan.md Section 12)
+/target/
+
+# Editor/OS cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Env files (this project has none, but never allow one in by accident)
+.env
+.env.*
+!.env.example
