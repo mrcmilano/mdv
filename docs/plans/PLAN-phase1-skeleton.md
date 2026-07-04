@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-1-phase1-skeleton`
 _Date:_ 2026-07-04
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #1
 _PR:_ #<pr-number>
 <!-- filled in after first push -->
@@ -109,9 +109,9 @@ included in Finish.
       a pty + `pyte` terminal-emulation harness). 1 LOW finding deferred, see
       below. Second pass: PASS.
 - [ ] Update `README.md` if affected — N/A, no `README.md` exists yet in this repo.
-- [ ] Convert draft PR to ready-for-review; add `Closes #1` to PR description;
+- [x] Convert draft PR to ready-for-review; add `Closes #1` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 1 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
