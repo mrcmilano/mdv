@@ -6,15 +6,18 @@ mod view;
 use std::env;
 use std::fs;
 use std::io;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use crossterm::cursor::{Hide, Show};
-use crossterm::execute;
+use crossterm::cursor::{Hide, MoveTo, Show};
+use crossterm::event::{read, Event};
+use crossterm::style::Print;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
+    LeaveAlternateScreen,
 };
+use crossterm::{execute, queue};
 
 const USAGE: &str = "Usage: mdv <FILE>\n       mdv --help | -h\n       mdv --version | -V";
 
@@ -32,10 +35,7 @@ Keybindings (Normal mode):
   Esc                         close overlay / cancel search input / clear search highlights
   q, Ctrl-C                   quit";
 
-// Fields become live once task 7 wires the event loop to consume them.
-#[allow(dead_code)]
 struct RunConfig {
-    path: PathBuf,
     contents: String,
 }
 
@@ -88,7 +88,7 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     let contents = String::from_utf8(bytes)
         .map_err(|_| format!("mdv: '{}' is not valid UTF-8", path.display()))?;
 
-    Ok(Cli::Run(RunConfig { path, contents }))
+    Ok(Cli::Run(RunConfig { contents }))
 }
 
 /// Security-critical sanitization (build plan Section 5), applied to the
@@ -97,7 +97,6 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 /// and C1 control with U+FFFD. `\n` is preserved as the line separator.
 /// Neutralizes escape-sequence injection — no other ANSI/OSC sequence in the
 /// source file survives to reach the terminal.
-#[allow(dead_code)]
 fn sanitize(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
@@ -163,7 +162,21 @@ impl Drop for TerminalGuard {
     }
 }
 
-fn run(_config: RunConfig) -> Result<ExitCode, String> {
+/// Clears the screen and prints the current viewport's visible line slice.
+/// The only place output is written to the terminal (build plan Section 4).
+/// `\r\n` (not `\n`) is required between lines: raw mode disables the
+/// newline-to-CRLF translation a cooked terminal normally performs, so a
+/// bare `\n` would move down without returning to column 0.
+fn draw(view: &view::ViewState) -> io::Result<()> {
+    let mut stdout = io::stdout();
+    queue!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
+    for line in view.visible_lines() {
+        queue!(stdout, Print(line), Print("\r\n"))?;
+    }
+    stdout.flush()
+}
+
+fn run(config: RunConfig) -> Result<ExitCode, String> {
     ensure_stdout_is_tty()?;
     let _terminal = TerminalGuard::enter().map_err(|e| {
         format!(
@@ -171,7 +184,52 @@ fn run(_config: RunConfig) -> Result<ExitCode, String> {
             clean_io_message(&e)
         )
     })?;
-    todo!("wired up once the event loop exists (task 7)")
+
+    let sanitized = sanitize(&config.contents);
+    let lines: Vec<String> = sanitized.lines().map(str::to_string).collect();
+
+    let (_width, height) = size().map_err(|e| {
+        format!(
+            "mdv: failed to query terminal size: {}",
+            clean_io_message(&e)
+        )
+    })?;
+    let mut view = view::ViewState::new(lines, height as usize);
+
+    let io_err = |e: io::Error| format!("mdv: failed to draw: {}", clean_io_message(&e));
+    draw(&view).map_err(io_err)?;
+
+    while let Ok(event) = read() {
+        let Event::Key(key_event) = event else {
+            continue;
+        };
+
+        let action = match input::map(key_event) {
+            Some(action) => action,
+            None => continue,
+        };
+
+        if action == input::Action::Quit {
+            break;
+        }
+
+        let previous_offset = view.offset();
+        match action {
+            input::Action::LineDown => view.scroll_down(1),
+            input::Action::LineUp => view.scroll_up(1),
+            input::Action::HalfPageDown => view.half_page_down(),
+            input::Action::HalfPageUp => view.half_page_up(),
+            input::Action::Top => view.jump_to_top(),
+            input::Action::Bottom => view.jump_to_bottom(),
+            input::Action::Quit => unreachable!("Quit is handled above before this match"),
+        }
+
+        if view.offset() != previous_offset {
+            draw(&view).map_err(io_err)?;
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
 }
 
 fn main() -> ExitCode {
@@ -353,7 +411,6 @@ mod tests {
         let file = TempFile::new(b"# Hello\n\nworld\n");
         match parse_args(args(&[file.path.to_str().unwrap()])).expect("expected Ok") {
             Cli::Run(config) => {
-                assert_eq!(config.path, file.path);
                 assert_eq!(config.contents, "# Hello\n\nworld\n");
             }
             _ => panic!("expected Cli::Run"),

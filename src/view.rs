@@ -8,8 +8,6 @@ pub struct ViewState {
     viewport_height: usize,
 }
 
-// Methods become live once task 7 wires the event loop to call them.
-#[allow(dead_code)]
 impl ViewState {
     pub fn new(lines: Vec<String>, viewport_height: usize) -> Self {
         ViewState {

@@ -2,8 +2,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 /// Normal-mode scrolling/quit actions implemented in Phase 1. `t`, `/`, `n`,
 /// `N` depend on TOC/search state that doesn't exist until Phase 5.
-// Variants and `map` become live once task 7 wires the event loop to call it.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     LineUp,
@@ -19,7 +17,6 @@ pub enum Action {
 /// Section 7's Normal-mode table (Phase 1 subset) — the caller should treat
 /// that as a no-op. Only key-press events are mapped; release/repeat events
 /// (emitted on some platforms) are ignored.
-#[allow(dead_code)]
 pub fn map(event: KeyEvent) -> Option<Action> {
     if event.kind != KeyEventKind::Press {
         return None;
