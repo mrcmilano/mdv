@@ -74,6 +74,12 @@ included in Finish.
   `crossterm`? → ASSUMPTION: yes — Section 2 defines the dependency set as
   one-time project setup, and `cargo audit` (run at the end of this phase)
   should cover the full dependency set from the start.
+- Should Phase 1's event loop handle `Event::Resize` at all, given the
+  build plan's general terminal-lifecycle spec ("re-run layout, clamp scroll
+  offset, redraw") depends on `layout.rs`, which doesn't exist until Phase 2?
+  → DECIDED (user, 2026-07-04): ignore `Event::Resize` entirely in Phase 1.
+  `ViewState`'s `viewport_height` is fixed at construction; proper resize
+  handling arrives with `layout.rs` in Phase 2.
 
 ---
 
@@ -84,7 +90,7 @@ included in Finish.
 - [x] 1. Crate scaffolding: `Cargo.toml` with the 3 dependencies and release profile from Section 2, minimal `src/main.rs` with `#![forbid(unsafe_code)]` and an empty `fn main()`. `cargo build` and `cargo clippy -- -D warnings` clean.
 - [x] 2. CLI parsing & validation: positional `<FILE>`, `--help`/`-h`, `--version`/`-V`; error cases (no arg, unknown flag, unreadable file, non-UTF-8 file) print the one-line stderr message from Section 3 and exit 1; `--help` prints usage + the Section 7 keybinding table to stdout and exits 0; `--version` prints `mdv <version>` via `CARGO_PKG_VERSION` and exits 0. Parsing logic in a testable function with unit tests for each case.
 - [x] 3. `src/input.rs`: `KeyEvent -> Action` mapping for the Phase 1 scroll row decided in Open questions (line up/down, half-page up/down, top, bottom, quit). Unit tests covering every bound key and confirming unbound keys map to no-op.
-- [ ] 4. `src/view.rs`: minimal `ViewState` (scroll `offset`, raw lines, viewport height) with clamped scroll arithmetic (`max_offset = lines.len().saturating_sub(viewport_height)`, never negative). Unit tests for boundary conditions: empty file, single line, file shorter than viewport, scrolling past top/bottom.
+- [x] 4. `src/view.rs`: minimal `ViewState` (scroll `offset`, raw lines, viewport height) with clamped scroll arithmetic (`max_offset = lines.len().saturating_sub(viewport_height)`, never negative). Unit tests for boundary conditions: empty file, single line, file shorter than viewport, scrolling past top/bottom.
 - [ ] 5. Sanitization helper per Section 5 (strip `\r`; tabs → single space outside code blocks — no code-block concept yet in Phase 1, so tabs → single space unconditionally; other C0/DEL/C1 bytes → `�`), applied to file lines before they enter `ViewState`. Unit test: a line containing a raw ESC byte (`0x1b`) followed by an OSC 52 sequence — assert no `�`-replaced line contains byte `0x1b`.
 - [ ] 6. Terminal lifecycle in `main.rs`: enter alternate screen + raw mode + hide cursor on start; panic hook that restores the terminal before printing the panic message, then chains the previous hook; restore on every exit path. Wire the stdout-not-a-TTY precondition check (Section 3) to run before entering raw mode.
 - [ ] 7. Event loop wiring in `main.rs`: read file → sanitize (task 5) → split into raw lines → build `ViewState` (task 4) → blocking `crossterm::event::read()` → map via `input::map` (task 3) → mutate state → redraw only on change, printing just the visible line slice.

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod input;
+mod view;
 
 use std::env;
 use std::fs;
