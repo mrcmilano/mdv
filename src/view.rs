@@ -1,15 +1,16 @@
-/// Viewport state for the Phase 1 raw-line viewer: tracks which line is
-/// scrolled to the top and clamps all movement to valid bounds. Terminal
-/// resize is not handled in Phase 1 (see plan Open questions) — `viewport_height`
-/// is fixed for the lifetime of the value.
+use crate::layout::Line;
+
+/// Viewport state: tracks which line is scrolled to the top and clamps all
+/// movement to valid bounds. `set_layout` updates `lines`/`viewport_height`
+/// together on a terminal resize, re-clamping `offset` to the new bounds.
 pub struct ViewState {
     offset: usize,
-    lines: Vec<String>,
+    lines: Vec<Line>,
     viewport_height: usize,
 }
 
 impl ViewState {
-    pub fn new(lines: Vec<String>, viewport_height: usize) -> Self {
+    pub fn new(lines: Vec<Line>, viewport_height: usize) -> Self {
         ViewState {
             offset: 0,
             lines,
@@ -28,9 +29,18 @@ impl ViewState {
     }
 
     /// The lines currently visible in the viewport, in order.
-    pub fn visible_lines(&self) -> &[String] {
+    pub fn visible_lines(&self) -> &[Line] {
         let end = (self.offset + self.viewport_height).min(self.lines.len());
         &self.lines[self.offset..end]
+    }
+
+    /// Replaces the current layout (new wrapped lines + new viewport height)
+    /// after a terminal resize, clamping `offset` so it never points past
+    /// the new `max_offset`.
+    pub fn set_layout(&mut self, lines: Vec<Line>, viewport_height: usize) {
+        self.lines = lines;
+        self.viewport_height = viewport_height;
+        self.offset = self.offset.min(self.max_offset());
     }
 
     fn half_page(&self) -> usize {
@@ -68,8 +78,19 @@ impl ViewState {
 mod tests {
     use super::*;
 
-    fn lines(n: usize) -> Vec<String> {
-        (0..n).map(|i| format!("line {i}")).collect()
+    fn lines(n: usize) -> Vec<Line> {
+        (0..n)
+            .map(|i| Line {
+                spans: vec![crate::style::Span {
+                    text: format!("line {i}"),
+                    style: crate::style::Style::default(),
+                }],
+            })
+            .collect()
+    }
+
+    fn line_text(line: &Line) -> String {
+        line.spans.iter().map(|s| s.text.as_str()).collect()
     }
 
     #[test]
@@ -84,7 +105,8 @@ mod tests {
     fn single_line_file() {
         let view = ViewState::new(lines(1), 10);
         assert_eq!(view.max_offset(), 0);
-        assert_eq!(view.visible_lines(), &["line 0".to_string()]);
+        assert_eq!(view.visible_lines().len(), 1);
+        assert_eq!(line_text(&view.visible_lines()[0]), "line 0");
     }
 
     #[test]
@@ -137,6 +159,18 @@ mod tests {
         assert_eq!(view.offset(), 40);
         view.jump_to_top();
         assert_eq!(view.offset(), 0);
+    }
+
+    #[test]
+    fn set_layout_clamps_offset_to_the_new_max_offset() {
+        let mut view = ViewState::new(lines(20), 10);
+        view.jump_to_bottom();
+        assert_eq!(view.offset(), 10);
+        // Shrinking to 5 lines total drops max_offset to 0 (viewport height
+        // unchanged); offset must be pulled back down to fit.
+        view.set_layout(lines(5), 10);
+        assert_eq!(view.offset(), 0);
+        assert_eq!(view.visible_lines().len(), 5);
     }
 
     #[test]

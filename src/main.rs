@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 mod input;
+mod layout;
+mod render;
+mod style;
 mod view;
 
 use std::env;
@@ -12,7 +15,7 @@ use std::process::ExitCode;
 
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{read, Event};
-use crossterm::style::Print;
+use crossterm::style::{Attribute, Print, SetAttribute, SetForegroundColor};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
     LeaveAlternateScreen,
@@ -110,31 +113,6 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     Ok(Cli::Run(RunConfig { contents }))
 }
 
-/// Security-critical sanitization (build plan Section 5), applied to the
-/// whole file text before it is split into lines: strips `\r`, replaces tabs
-/// with a single space, and replaces every other C0 control character, DEL,
-/// and C1 control with U+FFFD. `\n` is preserved as the line separator.
-/// Neutralizes escape-sequence injection — no other ANSI/OSC sequence in the
-/// source file survives to reach the terminal.
-fn sanitize(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '\r' => {}
-            '\n' => out.push('\n'),
-            '\t' => out.push(' '),
-            c if is_replaceable_control(c) => out.push('\u{FFFD}'),
-            c => out.push(c),
-        }
-    }
-    out
-}
-
-fn is_replaceable_control(c: char) -> bool {
-    let code = c as u32;
-    (0x00..=0x1F).contains(&code) || code == 0x7F || (0x80..=0x9F).contains(&code)
-}
-
 fn ensure_stdout_is_tty() -> Result<(), String> {
     if io::stdout().is_terminal() {
         Ok(())
@@ -205,6 +183,10 @@ impl Drop for TerminalGuard {
 /// last line pushes the cursor past the bottom row when the viewport is
 /// completely full, which triggers a terminal scroll and shifts the just-drawn
 /// content up by one line.
+///
+/// Each span's full style is set explicitly (not diffed against the
+/// previous span) and reset immediately after its text, so style never
+/// bleeds onto whatever prints next regardless of what preceded it.
 fn draw(view: &view::ViewState) -> io::Result<()> {
     let mut stdout = io::stdout();
     queue!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
@@ -212,7 +194,31 @@ fn draw(view: &view::ViewState) -> io::Result<()> {
         if i > 0 {
             queue!(stdout, Print("\r\n"))?;
         }
-        queue!(stdout, Print(line))?;
+        for span in &line.spans {
+            if let Some(color) = span.style.fg {
+                queue!(stdout, SetForegroundColor(color))?;
+            }
+            if span.style.bold {
+                queue!(stdout, SetAttribute(Attribute::Bold))?;
+            }
+            if span.style.dim {
+                queue!(stdout, SetAttribute(Attribute::Dim))?;
+            }
+            if span.style.italic {
+                queue!(stdout, SetAttribute(Attribute::Italic))?;
+            }
+            if span.style.underline {
+                queue!(stdout, SetAttribute(Attribute::Underlined))?;
+            }
+            if span.style.strikethrough {
+                queue!(stdout, SetAttribute(Attribute::CrossedOut))?;
+            }
+            if span.style.reverse {
+                queue!(stdout, SetAttribute(Attribute::Reverse))?;
+            }
+            queue!(stdout, Print(&span.text))?;
+            queue!(stdout, SetAttribute(Attribute::Reset))?;
+        }
     }
     stdout.flush()
 }
@@ -226,47 +232,55 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
         )
     })?;
 
-    let sanitized = sanitize(&config.contents);
-    let lines: Vec<String> = sanitized.lines().map(str::to_string).collect();
+    let document = render::build_document(&config.contents);
 
-    let (_width, height) = size().map_err(|e| {
+    let (width, height) = size().map_err(|e| {
         format!(
             "mdv: failed to query terminal size: {}",
             clean_io_message(&e)
         )
     })?;
-    let mut view = view::ViewState::new(lines, height as usize);
+    let layout_result = layout::wrap(&document, width as usize);
+    let mut view = view::ViewState::new(layout_result.lines, height as usize);
 
     let io_err = |e: io::Error| format!("mdv: failed to draw: {}", clean_io_message(&e));
     draw(&view).map_err(io_err)?;
 
     while let Ok(event) = read() {
-        let Event::Key(key_event) = event else {
-            continue;
-        };
+        match event {
+            Event::Resize(width, height) => {
+                let layout_result = layout::wrap(&document, width as usize);
+                view.set_layout(layout_result.lines, height as usize);
+                draw(&view).map_err(io_err)?;
+            }
+            Event::Key(key_event) => {
+                let action = match input::map(key_event) {
+                    Some(action) => action,
+                    None => continue,
+                };
 
-        let action = match input::map(key_event) {
-            Some(action) => action,
-            None => continue,
-        };
+                if action == input::Action::Quit {
+                    break;
+                }
 
-        if action == input::Action::Quit {
-            break;
-        }
+                let previous_offset = view.offset();
+                match action {
+                    input::Action::LineDown => view.scroll_down(1),
+                    input::Action::LineUp => view.scroll_up(1),
+                    input::Action::HalfPageDown => view.half_page_down(),
+                    input::Action::HalfPageUp => view.half_page_up(),
+                    input::Action::Top => view.jump_to_top(),
+                    input::Action::Bottom => view.jump_to_bottom(),
+                    input::Action::Quit => {
+                        unreachable!("Quit is handled above before this match")
+                    }
+                }
 
-        let previous_offset = view.offset();
-        match action {
-            input::Action::LineDown => view.scroll_down(1),
-            input::Action::LineUp => view.scroll_up(1),
-            input::Action::HalfPageDown => view.half_page_down(),
-            input::Action::HalfPageUp => view.half_page_up(),
-            input::Action::Top => view.jump_to_top(),
-            input::Action::Bottom => view.jump_to_bottom(),
-            input::Action::Quit => unreachable!("Quit is handled above before this match"),
-        }
-
-        if view.offset() != previous_offset {
-            draw(&view).map_err(io_err)?;
+                if view.offset() != previous_offset {
+                    draw(&view).map_err(io_err)?;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -416,47 +430,6 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_strips_carriage_returns() {
-        assert_eq!(sanitize("a\r\nb\rc"), "a\nbc");
-    }
-
-    #[test]
-    fn sanitize_preserves_newlines_as_line_separators() {
-        assert_eq!(sanitize("a\nb\nc"), "a\nb\nc");
-    }
-
-    #[test]
-    fn sanitize_replaces_tabs_with_a_single_space() {
-        assert_eq!(sanitize("a\tb\t\tc"), "a b  c");
-    }
-
-    #[test]
-    fn sanitize_replaces_other_c0_controls_with_replacement_char() {
-        assert_eq!(sanitize("a\u{0007}b\u{001b}c"), "a\u{FFFD}b\u{FFFD}c");
-    }
-
-    #[test]
-    fn sanitize_replaces_del_and_c1_controls_with_replacement_char() {
-        assert_eq!(
-            sanitize("a\u{007F}b\u{0080}c\u{009F}d"),
-            "a\u{FFFD}b\u{FFFD}c\u{FFFD}d"
-        );
-    }
-
-    #[test]
-    fn sanitize_neutralizes_esc_byte_followed_by_osc_52_sequence() {
-        // A raw ESC byte followed by an OSC 52 clipboard-write sequence —
-        // the primary escape-sequence-injection threat (Section 12).
-        let malicious = "before\u{001b}]52;c;BASE64DATA==\u{0007}after";
-        let sanitized = sanitize(malicious);
-        assert!(
-            !sanitized.contains('\u{001b}'),
-            "sanitized text must not contain a raw ESC byte"
-        );
-        assert!(!sanitized.as_bytes().contains(&0x1b));
-    }
-
-    #[test]
     fn valid_file_parses_to_run() {
         let file = TempFile::new(b"# Hello\n\nworld\n");
         match parse_args(args(&[file.path.to_str().unwrap()])).expect("expected Ok") {
@@ -464,6 +437,75 @@ mod tests {
                 assert_eq!(config.contents, "# Hello\n\nworld\n");
             }
             _ => panic!("expected Cli::Run"),
+        }
+    }
+
+    /// Re-serializes one `Span` back to a plain-text marker form, applying
+    /// markers outermost-to-innermost per the fixed scheme (plan task 8):
+    /// bold `**`, italic `*`, strikethrough `~~`, `style::CODE` foreground
+    /// `` ` ``. The corpus never combines inline code with bold/italic/
+    /// strikethrough on the same run, so these four never need to interleave
+    /// beyond simple nesting. Dim/underline/link-color/heading-color have no
+    /// natural plain-text marker and are intentionally left unmarked — they
+    /// are covered by the `render.rs`/`layout.rs` unit tests instead.
+    fn serialize_span(span: &style::Span) -> String {
+        let mut text = span.text.clone();
+        if span.style.fg == Some(style::CODE) {
+            text = format!("`{text}`");
+        }
+        if span.style.strikethrough {
+            text = format!("~~{text}~~");
+        }
+        if span.style.italic {
+            text = format!("*{text}*");
+        }
+        if span.style.bold {
+            text = format!("**{text}**");
+        }
+        text
+    }
+
+    fn serialize_lines(lines: &[layout::Line]) -> String {
+        lines
+            .iter()
+            .map(|line| line.spans.iter().map(serialize_span).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn corpus_snapshot_at_width_80() {
+        let corpus_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus.md");
+        let snapshot_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/snapshots/corpus.txt");
+
+        let markdown = fs::read_to_string(corpus_path).expect("read tests/corpus.md");
+        let document = render::build_document(&markdown);
+        let result = layout::wrap(&document, 80);
+        let rendered = serialize_lines(&result.lines);
+
+        if env::var("UPDATE_SNAPSHOTS").is_ok() {
+            fs::write(snapshot_path, &rendered).expect("write snapshot");
+            return;
+        }
+
+        let expected = fs::read_to_string(snapshot_path).expect("read tests/snapshots/corpus.txt");
+        assert_eq!(
+            rendered, expected,
+            "corpus snapshot mismatch; run with UPDATE_SNAPSHOTS=1 to regenerate"
+        );
+    }
+
+    /// Section 12's other robustness requirement (no panic at widths 1/2/40
+    /// on adversarial input) extended to also cover the real corpus, now
+    /// that it exists — `layout::tests::no_panic_on_adversarial_input_at_narrow_widths`
+    /// covers the seeded-LCG half.
+    #[test]
+    fn corpus_renders_without_panicking_at_narrow_widths() {
+        let corpus_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus.md");
+        let markdown = fs::read_to_string(corpus_path).expect("read tests/corpus.md");
+        let document = render::build_document(&markdown);
+        for width in [1, 2, 40] {
+            let _ = layout::wrap(&document, width);
         }
     }
 }

@@ -1,0 +1,35 @@
+**HEADING** **ONE**
+**═══════════**
+
+Some **bold** **text**, some *italic* *text*, some ~~struck~~ ~~text~~, and one nested combination:
+**bold** ***italic*** **text**.
+
+**Heading** **Two**
+**───────────**
+
+A paragraph with `inline` `code`, a link with a distinct url: the text
+(https://example.com/page), an autolink: https://example.org, and an image:
+[image: a small icon].
+
+**Heading** **Three**
+
+A horizontal rule follows.
+
+────────────────────────────────────────────────────────────────────────────────
+
+**§** **Heading** **Four**
+
+Text before a hard break.
+Text after the hard break, and this line continues via a soft break onto what
+was a separate source line.
+
+**§** **Heading** **Five**
+
+CJK text: 你好世界. Emoji: 🎉🚀.
+
+**§** **Heading** **Six**
+
+One 200-character unbroken word:
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
