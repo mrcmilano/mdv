@@ -120,10 +120,6 @@ struct ParseCtx {
     /// source position — Section 5 requires them rendered at the document's
     /// end under a rule, not where they're physically defined.
     footnotes: Vec<(String, Vec<Block>)>,
-    /// Set by a `TaskListMarker` leaf event (always the first event inside a
-    /// task-list `Item`) and consumed by `parse_list` once the item's blocks
-    /// are fully parsed.
-    pending_checked: Option<bool>,
 }
 
 impl ParseCtx {
@@ -135,7 +131,6 @@ impl ParseCtx {
             image_alt_stack: Vec::new(),
             headings: Vec::new(),
             footnotes: Vec::new(),
-            pending_checked: None,
         }
     }
 }
@@ -213,8 +208,18 @@ fn force_dim(blocks: &mut [Block]) {
 
 /// Parses a `Block::List`'s items: consumes `Item`s (each recursively parsed
 /// via `parse_blocks`) until the list's own `End(List)`.
-fn parse_list<'a>(
-    events: &mut impl Iterator<Item = Event<'a>>,
+///
+/// `checked` is read via `.peek()` into a variable local to *this* loop
+/// iteration, not a shared `ParseCtx` field: an earlier version stashed it in
+/// `ParseCtx` between seeing `TaskListMarker` and consuming it after
+/// `parse_blocks` returned, but when an outer task item's own content
+/// contains a nested list, that nested list's `parse_list` call runs (and
+/// reads/clears the field) *before* the outer call gets to consume it —
+/// stealing the outer item's checked state and leaking it onto an unrelated
+/// inner item. Peeking here, before recursing into the item's content at
+/// all, keeps the value properly scoped per item.
+fn parse_list<'a, I: Iterator<Item = Event<'a>>>(
+    events: &mut std::iter::Peekable<I>,
     ctx: &mut ParseCtx,
     depth: u32,
 ) -> Vec<ListItem> {
@@ -223,11 +228,17 @@ fn parse_list<'a>(
         match event {
             Event::End(TagEnd::List(_)) => break,
             Event::Start(Tag::Item) => {
+                let checked = match events.peek() {
+                    Some(Event::TaskListMarker(_)) => {
+                        let Some(Event::TaskListMarker(checked)) = events.next() else {
+                            unreachable!()
+                        };
+                        Some(checked)
+                    }
+                    _ => None,
+                };
                 let blocks = parse_blocks(events, ctx, depth, Container::Item);
-                items.push(ListItem {
-                    checked: ctx.pending_checked.take(),
-                    blocks,
-                });
+                items.push(ListItem { checked, blocks });
             }
             _ => {}
         }
@@ -249,8 +260,8 @@ fn parse_list<'a>(
 /// accumulating into `ctx.current_spans` — this works unchanged whether
 /// they're wrapped in an explicit `Paragraph`/`Heading` or arrive bare at
 /// block scope (a tight list item's content).
-fn parse_blocks<'a>(
-    events: &mut impl Iterator<Item = Event<'a>>,
+fn parse_blocks<'a, I: Iterator<Item = Event<'a>>>(
+    events: &mut std::iter::Peekable<I>,
     ctx: &mut ParseCtx,
     depth: u32,
     container: Container,
@@ -466,9 +477,6 @@ fn parse_blocks<'a>(
                     None => ctx.current_spans.push(span),
                 }
             }
-            Event::TaskListMarker(checked) => {
-                ctx.pending_checked = Some(checked);
-            }
             Event::Text(text) => {
                 if let Some(alt) = ctx.image_alt_stack.last_mut() {
                     alt.push_str(&text);
@@ -531,7 +539,7 @@ pub fn build_document(markdown: &str) -> Document {
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
         | Options::ENABLE_FOOTNOTES;
-    let mut events = Parser::new_ext(markdown, options);
+    let mut events = Parser::new_ext(markdown, options).peekable();
 
     let mut ctx = ParseCtx::new();
     let mut blocks = parse_blocks(&mut events, &mut ctx, 0, Container::TopLevel);
@@ -1047,6 +1055,27 @@ mod tests {
             }
             other => panic!("expected List, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn checked_task_item_containing_a_nested_list_keeps_its_own_checked_state() {
+        // Adversarial-review finding: a shared `ParseCtx` scratch field for
+        // the pending TaskListMarker was read-and-cleared by the *inner*
+        // list's own item before the outer task item consumed it, stealing
+        // the outer's checked state and leaking it onto the unrelated inner
+        // item. The fix scopes it to a `parse_list` loop-local via peek.
+        let doc = build_document("- [x] outer\n  - inner");
+        let Block::List { items: outer, .. } = &doc.blocks[0] else {
+            panic!("expected top-level List");
+        };
+        assert_eq!(outer[0].checked, Some(true));
+        let Block::List { items: inner, .. } = &outer[0].blocks[1] else {
+            panic!(
+                "expected nested List as outer item's second block, got {:?}",
+                outer[0].blocks
+            );
+        };
+        assert_eq!(inner[0].checked, None);
     }
 
     #[test]

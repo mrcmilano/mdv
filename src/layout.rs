@@ -21,23 +21,36 @@ pub struct LayoutResult {
 }
 
 /// Security-critical sanitization (build plan Section 5), applied to every
-/// span's text before wrapping: strips `\r`, replaces tabs with a single
-/// space (the "4 spaces inside code blocks" branch is dead until Phase 3),
-/// and replaces every other C0 control character, DEL, and C1 control with
-/// U+FFFD. Neutralizes escape-sequence injection — no other ANSI/OSC
-/// sequence in the source file survives to reach the terminal.
-fn sanitize(text: &str) -> String {
+/// span's text before wrapping: strips `\r`, replaces every tab with
+/// `tab_replacement` (four literal spaces inside code blocks, a single space
+/// everywhere else — no tab-stop math), and replaces every other C0 control
+/// character, DEL, and C1 control with U+FFFD. Neutralizes escape-sequence
+/// injection — no other ANSI/OSC sequence in the source file survives to
+/// reach the terminal.
+fn sanitize_with_tab(text: &str, tab_replacement: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
             '\r' => {}
             '\n' => out.push('\n'),
-            '\t' => out.push(' '),
+            '\t' => out.push_str(tab_replacement),
             c if is_replaceable_control(c) => out.push('\u{FFFD}'),
             c => out.push(c),
         }
     }
     out
+}
+
+/// `sanitize_with_tab` with the "elsewhere" tab rule (a single space) —
+/// every source-derived text outside a code block's own content uses this.
+fn sanitize(text: &str) -> String {
+    sanitize_with_tab(text, " ")
+}
+
+/// `sanitize_with_tab` with the "inside a code block" tab rule (four literal
+/// spaces) — used only for `CodeBlock` content lines (build plan Section 5).
+fn sanitize_code(text: &str) -> String {
+    sanitize_with_tab(text, "    ")
 }
 
 fn is_replaceable_control(c: char) -> bool {
@@ -394,16 +407,20 @@ fn wrap_code_block(
     let mut lines = Vec::new();
     if let Some(lang) = language {
         if !lang.is_empty() {
+            // The fence info string is source text like any other and must
+            // go through the same sanitization as content lines (Section
+            // 12: "no exception for code blocks or raw HTML").
+            let sanitized_lang = sanitize(lang);
             lines.push(Line {
                 spans: vec![Span {
-                    text: format!("{GUTTER}({lang})"),
+                    text: format!("{GUTTER}({sanitized_lang})"),
                     style: gutter_style,
                 }],
             });
         }
     }
     for raw in source_lines {
-        let sanitized = sanitize(raw);
+        let sanitized = sanitize_code(raw);
         let mut spans = vec![Span {
             text: GUTTER.to_string(),
             style: gutter_style,
@@ -512,7 +529,9 @@ fn wrap_footnote_def(
     content_width: usize,
     list_level: u32,
 ) -> Vec<Line> {
-    let marker = format!("[^{label}]: ");
+    // The footnote label is source text like any other and must go through
+    // the same sanitization as everything else (Section 12: "no exception").
+    let marker = format!("[^{}]: ", sanitize(label));
     let marker_width = UnicodeWidthStr::width(marker.as_str());
     let inner_width = content_width.saturating_sub(marker_width).max(1);
     let mut inner_lines = wrap_block_sequence(blocks, inner_width, list_level);
@@ -572,7 +591,12 @@ fn wrap_list(
             ),
             Some(false) => ("[ ]".to_string(), Style::default()),
             None => match ordered {
-                Some(start) => (format!("{}.", start + i as u64), Style::default()),
+                // saturating: an adversarial start number near u64::MAX
+                // combined with many items must never panic (Section 12).
+                Some(start) => (
+                    format!("{}.", start.saturating_add(i as u64)),
+                    Style::default(),
+                ),
                 None => (bullet_symbol.to_string(), Style::default()),
             },
         };
@@ -660,6 +684,20 @@ mod tests {
     #[test]
     fn sanitize_replaces_tabs_with_a_single_space() {
         assert_eq!(sanitize("a\tb"), "a b");
+    }
+
+    #[test]
+    fn sanitize_code_replaces_tabs_with_four_spaces() {
+        // Build plan Section 5: tabs expand to 4 literal spaces inside code
+        // blocks specifically, vs. 1 space everywhere else.
+        assert_eq!(sanitize_code("a\tb"), "a    b");
+    }
+
+    #[test]
+    fn code_block_content_expands_tabs_to_four_spaces() {
+        let doc = build_document("```\na\tb\n```");
+        let result = wrap(&doc, 80);
+        assert_eq!(plain_spans(&result.lines), vec!["  │ a    b"]);
     }
 
     #[test]
@@ -917,6 +955,38 @@ mod tests {
     #[test]
     fn code_block_sanitizes_esc_bytes() {
         let malicious = "```\nbefore\u{001b}]52;c;X\u{0007}after\n```";
+        let doc = build_document(malicious);
+        let result = wrap(&doc, 80);
+        for line in &result.lines {
+            for span in &line.spans {
+                assert!(!span.text.as_bytes().contains(&0x1b));
+            }
+        }
+    }
+
+    #[test]
+    fn code_block_sanitizes_esc_bytes_in_the_fence_language_string() {
+        // Adversarial-review finding: the fence info string (the language
+        // name) was embedded into the gutter's `(lang)` line without going
+        // through `sanitize()`, unlike every other source-derived line in
+        // this codebase — an ESC byte in the fence line (e.g.
+        // ```rust<ESC>]52;...) reached the terminal unfiltered.
+        let malicious = "```rust\u{001b}]52;c;X\u{0007}\ncode\n```";
+        let doc = build_document(malicious);
+        let result = wrap(&doc, 80);
+        for line in &result.lines {
+            for span in &line.spans {
+                assert!(!span.text.as_bytes().contains(&0x1b));
+            }
+        }
+    }
+
+    #[test]
+    fn footnote_def_sanitizes_esc_bytes_in_the_label() {
+        // Adversarial-review finding: same class of bug as the fence
+        // language string above — the footnote label was embedded into the
+        // `[^label]: ` marker without going through `sanitize()`.
+        let malicious = "text[^foo\u{001b}bar]\n\n[^foo\u{001b}bar]: body";
         let doc = build_document(malicious);
         let result = wrap(&doc, 80);
         for line in &result.lines {
