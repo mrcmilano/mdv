@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod input;
+mod render;
 mod style;
 mod view;
 
