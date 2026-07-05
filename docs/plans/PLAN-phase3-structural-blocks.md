@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-5-phase3-structural-blocks`
 _Date:_ 2026-07-05
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #5
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -115,19 +115,30 @@ narrow reading of unambiguous adjacent spec text, not a product decision):
 
 ### Finish
 
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
-      (FIX REQUIRED: add tasks to Implementation above and complete them;
-       LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #5` to PR description;
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass (102 passing)
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+      (5 FIX REQUIRED findings resolved: task-checkbox state leaking across
+      list nesting, unchecked ordinal-numbering overflow, fence-language and
+      footnote-label ESC-injection sanitization gaps, missing 4-space
+      code-block tab expansion — see commits on this branch for detail)
+- [x] Run `/skill:pre-merge-code-review` — APPROVE after 2 more findings fixed
+      (ordered task-list items dropping their ordinal; a redundant
+      truncation-helper duplication simplified)
+- [x] Update `README.md` if affected (status line updated for Phase 3)
+- [x] Convert draft PR to ready-for-review; add `Closes #5` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
-      `gh issue edit 5 --remove-label agent --remove-label "in progress" --add-label needs-review`
+- [x] Autonomous run (per /goal override): merge PR into develop and
+      `gh issue close 5` directly, instead of the human-review label
+      round-trip in AGENTS.md §1 step 5.
 
 ---
 
-<!-- Add this section only if adversarial-review produced deferred LOW findings -->
 ## Deferred findings
 <!-- Format: [LOW] <finding> — <rationale for deferral> — <follow-up issue if any> -->
+- [LOW, pre-existing, not from this phase] `src/layout.rs`'s Phase 2 tests use
+  `assert_eq!(x, true)` (clippy `bool_assert_comparison`), only caught by
+  `cargo clippy --all-targets`, not the project's mandated bare
+  `cargo clippy -- -D warnings`. Noticed during pre-merge-code-review;
+  out of scope for this branch (predates Phase 3) — left for a future
+  cleanup pass rather than touching unrelated Phase 2 test code here.
