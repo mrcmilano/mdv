@@ -120,6 +120,7 @@ if implementation reveals a problem):
 - [x] 8. `tests/corpus.md` + snapshot test: corpus covering every Phase-2 element (H1–H6, paragraph, bold/italic/strikethrough incl. one nested combo, inline code, link with distinct url, autolink, image, horizontal rule, hard break, soft break, CJK text, emoji, one 200-char unbroken word). The corpus deliberately never combines inline code with bold/italic/strikethrough on the same run of text, so the serializer (below) never needs a code+other-marker composition rule. Snapshot test rendering the corpus at width 80 into plain text with re-serialized markers, diffed against checked-in `tests/snapshots/corpus.txt` (`UPDATE_SNAPSHOTS=1` regenerates it; no snapshot crate). **Serialization scheme** (fixed for this and all future phases' snapshot tests): for each `Span`, wrap its literal text with markers for attributes that have a natural plain-text convention, outermost-to-innermost: bold → `**...**`, italic → `*...*`, strikethrough → `~~...~~`, `style::CODE` foreground → `` `...` `` (mutually exclusive with the other three per the corpus constraint above). Dim/underline/link-color and heading-color are deliberately **not** given their own markers — they have no natural plain-text convention, and are instead verified precisely by the `render.rs`/`layout.rs` unit tests in tasks 3, 4, and 6 asserting directly on `Style` fields. The snapshot's job is layout/formatting-marker stability (text content, wrapping, blank-line placement, bold/italic/strike/code), not full attribute coverage.
 - [x] 9. Manual acceptance verification against the Phase 2 accept criteria (Section 9): corpus renders with correct styling, resizing the terminal reflows paragraphs live, a bold word split across a wrap stays bold on both lines. Record the outcome in the PR description (pty-driven harness, matching Phase 1's approach).
       Verified via a pty + `pyte` terminal-emulation harness (same approach as Phase 1): spawned the real debug binary under a pseudo-TTY at 100x30, fed `tests/corpus.md`, and inspected the emulated screen buffer plus its bold/color cell attributes. Results: (1) all Phase 2 elements rendered as specified — heading colors/bold per level, `§ ` prefix on H4–H6, `═`/`─` underlines sized correctly, dim rule spanning the full content width, link text followed by a dim `(url)` suffix, autolink with no suffix, image alt placeholder, CJK/emoji intact; (2) resizing the pty from 100 to 40 columns and sending `SIGWINCH` triggered a live reflow — the same corpus re-wrapped correctly at the new width, headings/rules resized to the new content width; (3) a dedicated narrow-width (10 cols) test with a single 26-char bold word confirmed the word splits across 3 lines with every fragment carrying the bold attribute in the emulated screen buffer.
+- [x] 10. **FIX REQUIRED (second adversarial-review pass, ref #4):** `render.rs`'s `image_alt: Option<String>` was a single slot, not a stack, so a `Link` nested inside an `Image`'s alt text (`![a [link](url) cat](cat.png)`) leaked a visible `" (url)"` span into the paragraph ahead of the image placeholder, and an `Image` nested inside another `Image`'s alt text (`![outer ![inner](a.png) text](b.png)`) corrupted state — the inner image's `End` push landed in `current_spans` while the outer was still "open," and the outer's trailing text then fell through to the non-alt branch and rendered as plain, undimmed text. Both are valid CommonMark that pulldown-cmark actually emits (confirmed empirically, not just by inspection). Fix: `image_alt` became a `Vec<String>` stack (one entry per open `Image`, pushed/popped on `Start`/`End`); `Text`/`Code`/`SoftBreak` route to `image_alt.last_mut()` when non-empty; nested `End(Image)` folds the inner alt text (unwrapped, no `[image: ]` brackets) into the new top rather than leaking a `Span`. `link_stack`'s start marker became an enum (`Spans(usize)` / `Alt(usize)`) recording which buffer the link's content lands in, so the autolink rendered-text comparison and the url-suffix push both target the correct buffer whether or not the link is nested inside an image. Added regression tests for both scenarios. Re-ran adversarial-review: second pass PASS (see Finish checklist).
 
 ### Finish
 - [x] Write / update tests for all implementation tasks above
@@ -128,10 +129,15 @@ if implementation reveals a problem):
 - [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-      One FIX REQUIRED finding (heading with no content producing an
+      First pass: one FIX REQUIRED finding (heading with no content producing an
       out-of-bounds/misattributed `heading_lines` index) — fixed; re-ran the
       skill, second pass PASS. One LOW finding (grapheme-cluster wrap
       splitting) deferred — see Deferred findings below.
+      Third pass (new session, ref #4): one FIX REQUIRED finding (nested
+      Image/Link alt-text state corruption) — fixed as task 10 above; two
+      LOW findings (heading color override on dim spans, `TocEntry` text
+      including link/image url suffixes) deferred — see Deferred findings
+      below. Re-ran the skill, fourth pass PASS.
 - [x] Update `docs/architecture.md` if actual module boundaries/data flow diverge from what's documented there (beyond the `Style.underline` fix already folded into task 1)
       No divergence — the existing module layout, data flow, and boundaries
       sections already describe exactly what Phase 2 built (they were
@@ -165,3 +171,27 @@ if implementation reveals a problem):
   math on simple single-codepoint characters, which the corpus and unit
   tests already cover; combining characters aren't in the corpus. Revisit
   only if a real document surfaces visibly broken glyphs.
+
+- **LOW — a link's dim url-suffix or an image's dim alt placeholder gets
+  promoted to bold + heading color when nested inside an H1–H3 heading.**
+  `layout::heading_presentation_spans` only checks `style.fg.is_none()` to
+  decide whether a span already "owns" its color; it doesn't also check
+  `dim`. A dim-only span (`fg: None, dim: true`) therefore gets `fg:
+  Some(HEADING)` layered on top, alongside its existing `dim: true` —  a
+  bold+dim+cyan combination never intended by the spec, instead of staying
+  visually neutral/dim. Never panics, not exercised by the corpus (which
+  doesn't nest a link/image inside a heading). Low visual-fidelity impact;
+  revisit if a real heading with an embedded link/image surfaces the
+  combination looking wrong in practice.
+
+- **LOW — `TocEntry.text` includes the auto-appended link/image url suffix.**
+  `render.rs`'s `End(TagEnd::Heading)` builds `TocEntry.text` by
+  concatenating every span's text, including the dim `" (url)"` suffix
+  `End(TagEnd::Link)` appends and the `"[image: alt]"` placeholder
+  `End(TagEnd::Image)` appends. A heading like `## [Link Text](url)` would
+  produce a TOC entry of `"Link Text (url)"` rather than `"Link Text"`.
+  Currently inert — `Document.headings` has no consumer until Phase 5 (see
+  Out of scope) — so this doesn't affect Phase 2's acceptance criteria.
+  Flagged now so Phase 5 doesn't rediscover it as a surprise; fix then by
+  computing TOC text from only the non-suffix spans, or by tagging the
+  suffix/placeholder spans so they can be excluded.
