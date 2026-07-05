@@ -58,6 +58,14 @@ pub fn build_document(markdown: &str) -> Document {
     // valid; Strong/Emphasis/Strikethrough/Link push a modified copy and pop
     // it on their matching End.
     let mut style_stack: Vec<Style> = vec![Style::default()];
+    // One entry per currently-open Link: its destination URL, and the index
+    // in `current_spans` where its content started, so End(Link) can
+    // recompute the link's rendered plain text for the autolink comparison.
+    let mut link_stack: Vec<(String, usize)> = Vec::new();
+    // Set while inside an Image's alt-text subtree: nested markup is
+    // flattened to plain text and accumulated here rather than pushed as
+    // styled spans (Section 5: alt text only, never fetch/render).
+    let mut image_alt: Option<String> = None;
     // Depth counter for an unhandled Start/End tag subtree currently being
     // skipped; >0 means every event is consumed until it unwinds to 0.
     let mut skip_depth: u32 = 0;
@@ -94,6 +102,16 @@ pub fn build_document(markdown: &str) -> Document {
                 style.strikethrough = true;
                 style_stack.push(style);
             }
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                link_stack.push((dest_url.into_string(), current_spans.len()));
+                let mut style = *style_stack.last().unwrap();
+                style.fg = Some(style::LINK);
+                style.underline = true;
+                style_stack.push(style);
+            }
+            Event::Start(Tag::Image { .. }) => {
+                image_alt = Some(String::new());
+            }
             Event::End(TagEnd::Paragraph) => {
                 blocks.push(Block::Paragraph {
                     spans: std::mem::take(&mut current_spans),
@@ -118,21 +136,79 @@ pub fn build_document(markdown: &str) -> Document {
             Event::End(TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough) => {
                 style_stack.pop();
             }
+            Event::End(TagEnd::Link) => {
+                style_stack.pop();
+                let (dest_url, start) = link_stack.pop().unwrap();
+                let rendered_text: String = current_spans[start..]
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect();
+                // Section 5's own operational definition of "autolink": the
+                // link's rendered plain text equals its destination URL.
+                if rendered_text != dest_url {
+                    current_spans.push(Span {
+                        text: format!(" ({dest_url})"),
+                        style: Style {
+                            dim: true,
+                            ..Style::default()
+                        },
+                    });
+                }
+            }
+            Event::End(TagEnd::Image) => {
+                let alt = image_alt.take().unwrap_or_default();
+                current_spans.push(Span {
+                    text: format!("[image: {alt}]"),
+                    style: Style {
+                        dim: true,
+                        ..Style::default()
+                    },
+                });
+            }
             Event::Rule => {
                 blocks.push(Block::Rule);
             }
             Event::Text(text) => {
-                current_spans.push(Span {
-                    text: text.into_string(),
-                    style: *style_stack.last().unwrap(),
-                });
+                if let Some(alt) = image_alt.as_mut() {
+                    alt.push_str(&text);
+                } else {
+                    current_spans.push(Span {
+                        text: text.into_string(),
+                        style: *style_stack.last().unwrap(),
+                    });
+                }
             }
             Event::Code(text) => {
-                let mut code_style = *style_stack.last().unwrap();
-                code_style.fg = Some(style::CODE);
+                if let Some(alt) = image_alt.as_mut() {
+                    alt.push_str(&text);
+                } else {
+                    let mut code_style = *style_stack.last().unwrap();
+                    code_style.fg = Some(style::CODE);
+                    current_spans.push(Span {
+                        text: text.into_string(),
+                        style: code_style,
+                    });
+                }
+            }
+            Event::SoftBreak => {
+                if let Some(alt) = image_alt.as_mut() {
+                    alt.push(' ');
+                } else {
+                    current_spans.push(Span {
+                        text: " ".to_string(),
+                        style: *style_stack.last().unwrap(),
+                    });
+                }
+            }
+            Event::HardBreak => {
+                // Sentinel recognized by layout.rs as a forced line break.
+                // Safe because pulldown-cmark never places a literal '\n'
+                // inside a Text event (source line breaks arrive as separate
+                // SoftBreak/HardBreak events), so this can only mean "break
+                // here" and never appear as real content.
                 current_spans.push(Span {
-                    text: text.into_string(),
-                    style: code_style,
+                    text: "\n".to_string(),
+                    style: Style::default(),
                 });
             }
             Event::Start(_) => {
@@ -290,6 +366,106 @@ mod tests {
                         bold: true,
                         ..Style::default()
                     },
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn link_with_distinct_url_gets_dim_url_suffix() {
+        let spans = only_paragraph_spans("[text](https://example.com)");
+        assert_eq!(
+            spans,
+            vec![
+                Span {
+                    text: "text".to_string(),
+                    style: Style {
+                        fg: Some(style::LINK),
+                        underline: true,
+                        ..Style::default()
+                    },
+                },
+                Span {
+                    text: " (https://example.com)".to_string(),
+                    style: Style {
+                        dim: true,
+                        ..Style::default()
+                    },
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn autolink_skips_the_url_suffix() {
+        let spans = only_paragraph_spans("<https://example.com>");
+        assert_eq!(
+            spans,
+            vec![Span {
+                text: "https://example.com".to_string(),
+                style: Style {
+                    fg: Some(style::LINK),
+                    underline: true,
+                    ..Style::default()
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn image_becomes_dim_alt_placeholder() {
+        let spans = only_paragraph_spans("![a cat](cat.png)");
+        assert_eq!(
+            spans,
+            vec![Span {
+                text: "[image: a cat]".to_string(),
+                style: Style {
+                    dim: true,
+                    ..Style::default()
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn hard_break_produces_newline_sentinel() {
+        let spans = only_paragraph_spans("line one  \nline two");
+        assert_eq!(
+            spans,
+            vec![
+                Span {
+                    text: "line one".to_string(),
+                    style: Style::default(),
+                },
+                Span {
+                    text: "\n".to_string(),
+                    style: Style::default(),
+                },
+                Span {
+                    text: "line two".to_string(),
+                    style: Style::default(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn soft_break_produces_a_space() {
+        let spans = only_paragraph_spans("line one\nline two");
+        assert_eq!(
+            spans,
+            vec![
+                Span {
+                    text: "line one".to_string(),
+                    style: Style::default(),
+                },
+                Span {
+                    text: " ".to_string(),
+                    style: Style::default(),
+                },
+                Span {
+                    text: "line two".to_string(),
+                    style: Style::default(),
                 },
             ]
         );
