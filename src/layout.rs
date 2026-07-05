@@ -1409,4 +1409,33 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn table_cell_sanitizes_esc_bytes() {
+        // Adversarial-review finding class check: cell content routes
+        // through the same `wrap_spans` pipeline as paragraphs (unlike the
+        // code-block language string / footnote label bugs found in Phase
+        // 3), so this should already be clean — verified explicitly here
+        // since it's exactly the bug class that recurred twice last phase.
+        let malicious = "| a |\n|---|\n| before\u{001b}]52;c;X\u{0007}after |";
+        let doc = build_document(malicious);
+        let result = wrap(&doc, 80);
+        for line in &result.lines {
+            for span in &line.spans {
+                assert!(!span.text.as_bytes().contains(&0x1b));
+            }
+        }
+    }
+
+    #[test]
+    fn table_with_no_body_rows_still_renders_a_complete_box() {
+        // top border, header content, header separator, bottom border.
+        let doc = build_document("| a | b |\n|---|---|\n");
+        let result = wrap(&doc, 80);
+        let rendered = plain_spans(&result.lines);
+        assert_eq!(rendered.len(), 4);
+        assert!(rendered[0].starts_with('┌') && rendered[0].ends_with('┐'));
+        assert!(rendered[2].starts_with('├') && rendered[2].ends_with('┤'));
+        assert!(rendered[3].starts_with('└') && rendered[3].ends_with('┘'));
+    }
 }
