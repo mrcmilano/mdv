@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-4-phase2-rendering`
 _Date:_ 2026-07-05
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #4
 _PR:_ #<pr-number>
 <!-- filled in after first push -->
@@ -138,9 +138,9 @@ if implementation reveals a problem):
       written in anticipation of it during Phase 1).
 - [x] Update `README.md` if affected — updated the status line from Phase 1
       to Phases 1–2.
-- [ ] Convert draft PR to ready-for-review; add `Closes #4` to PR description;
+- [x] Convert draft PR to ready-for-review; add `Closes #4` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 4 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
