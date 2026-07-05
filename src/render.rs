@@ -5,16 +5,37 @@ use crate::style::{Span, Style};
 
 /// Block-level structure before wrapping. `Table`/`Alignment` are added when
 /// Phase 4 lands (see plan Open questions).
+// `CodeBlock`/`BlockQuote` are the build plan's own Section 4 variant names
+// (not a style choice this crate is free to change).
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Block {
-    Heading { level: u8, spans: Vec<Span> },
-    Paragraph { spans: Vec<Span> },
+    Heading {
+        level: u8,
+        spans: Vec<Span>,
+    },
+    Paragraph {
+        spans: Vec<Span>,
+    },
     Rule,
-    CodeBlock { language: Option<String>, lines: Vec<String> },
-    BlockQuote { blocks: Vec<Block> },
-    List { ordered: Option<u64>, items: Vec<ListItem> },
-    Html { lines: Vec<String> },
-    FootnoteDef { label: String, blocks: Vec<Block> },
+    CodeBlock {
+        language: Option<String>,
+        lines: Vec<String>,
+    },
+    BlockQuote {
+        blocks: Vec<Block>,
+    },
+    List {
+        ordered: Option<u64>,
+        items: Vec<ListItem>,
+    },
+    Html {
+        lines: Vec<String>,
+    },
+    FootnoteDef {
+        label: String,
+        blocks: Vec<Block>,
+    },
 }
 
 /// One item of a `Block::List`. `checked` is `None` for a non-task item,
@@ -59,127 +80,268 @@ enum LinkTextStart {
     Alt(usize),
 }
 
-/// Parses `markdown` into a `Document`. Any event this phase doesn't handle
-/// (block-level tags `Table`/`List`/`BlockQuote`/`CodeBlock`/
-/// `FootnoteDefinition`/`HtmlBlock`, and leaf events `Html`/`InlineHtml`/
-/// `TaskListMarker`/`FootnoteReference`) is silently consumed so the flat
-/// iteration stays balanced — it contributes no `Block`/`Span` and never
-/// panics. Temporary until Phase 3/4 add real handling.
-pub fn build_document(markdown: &str) -> Document {
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_FOOTNOTES;
-    let parser = Parser::new_ext(markdown, options);
+/// Which block-level container a `parse_blocks` call is currently filling.
+/// Determines which `TagEnd` stops the recursion and hands control back to
+/// the caller. `TopLevel` never matches an `End` — it only stops when the
+/// event iterator is exhausted.
+#[derive(PartialEq)]
+enum Container {
+    TopLevel,
+    BlockQuote,
+    Item,
+    FootnoteDefinition,
+}
 
-    let mut blocks = Vec::new();
-    let mut headings = Vec::new();
-    let mut current_spans: Vec<Span> = Vec::new();
-    // Nestable style stack (task 3): the top is the style applied to the next
-    // Text/Code event. Starts with one default entry so `.last()` is always
-    // valid; Strong/Emphasis/Strikethrough/Link push a modified copy and pop
-    // it on their matching End.
-    let mut style_stack: Vec<Style> = vec![Style::default()];
-    // One entry per currently-open Link: its destination URL, and where its
-    // content started, so End(Link) can recompute the link's rendered plain
-    // text for the autolink comparison. Content lands in `current_spans`
-    // normally, but if the link is itself nested inside an Image's alt text
-    // (unusual but valid Markdown pulldown-cmark does emit), its content
-    // instead accumulates in `image_alt_stack`'s top entry — `LinkTextStart`
-    // records which buffer to look at.
-    let mut link_stack: Vec<(String, LinkTextStart)> = Vec::new();
-    // Stack of in-progress alt-text accumulators, one per currently-open
-    // Image (innermost last): nested markup is flattened to plain text and
-    // accumulated here rather than pushed as styled spans (Section 5: alt
-    // text only, never fetch/render). A stack, not a single slot, because an
-    // Image can itself be nested inside another Image's alt text.
-    let mut image_alt_stack: Vec<String> = Vec::new();
-    // Depth counter for an unhandled Start/End tag subtree currently being
-    // skipped; >0 means every event is consumed until it unwinds to 0.
-    let mut skip_depth: u32 = 0;
+impl Container {
+    fn is_closed_by(&self, end: &TagEnd) -> bool {
+        matches!(
+            (self, end),
+            (Container::BlockQuote, TagEnd::BlockQuote(_))
+                | (Container::Item, TagEnd::Item)
+                | (Container::FootnoteDefinition, TagEnd::FootnoteDefinition)
+        )
+    }
+}
 
-    for event in parser {
-        if skip_depth > 0 {
-            match event {
-                Event::Start(_) => skip_depth += 1,
-                Event::End(_) => skip_depth -= 1,
-                _ => {}
+/// Mutable parse state threaded through the recursive-descent block parser.
+/// Inline-content accumulation (`style_stack`/`current_spans`/`link_stack`/
+/// `image_alt_stack`) is a single shared buffer rather than one per nesting
+/// level: content only ever accumulates depth-first, and is always flushed
+/// into a `Block::Paragraph` (see `flush_pending_paragraph`) before any
+/// recursive descent into a nested block-level construct, so nothing is ever
+/// lost or double-buffered across recursion.
+struct ParseCtx {
+    style_stack: Vec<Style>,
+    current_spans: Vec<Span>,
+    link_stack: Vec<(String, LinkTextStart)>,
+    image_alt_stack: Vec<String>,
+    headings: Vec<TocEntry>,
+    /// Footnote definitions collected in encounter order regardless of their
+    /// source position — Section 5 requires them rendered at the document's
+    /// end under a rule, not where they're physically defined.
+    footnotes: Vec<(String, Vec<Block>)>,
+    /// Set by a `TaskListMarker` leaf event (always the first event inside a
+    /// task-list `Item`) and consumed by `parse_list` once the item's blocks
+    /// are fully parsed.
+    pending_checked: Option<bool>,
+}
+
+impl ParseCtx {
+    fn new() -> Self {
+        ParseCtx {
+            style_stack: vec![Style::default()],
+            current_spans: Vec::new(),
+            link_stack: Vec::new(),
+            image_alt_stack: Vec::new(),
+            headings: Vec::new(),
+            footnotes: Vec::new(),
+            pending_checked: None,
+        }
+    }
+}
+
+/// Flushes any inline content accumulated directly at block scope (a tight
+/// list item's content arrives as bare inline events with no `Paragraph`
+/// wrapper — see the Phase 3 plan's event-stream investigation) into a
+/// trailing `Block::Paragraph`. A no-op when nothing is pending, which is
+/// always the case for content that *was* wrapped in an explicit `Paragraph`.
+fn flush_pending_paragraph(blocks: &mut Vec<Block>, ctx: &mut ParseCtx) {
+    if !ctx.current_spans.is_empty() {
+        blocks.push(Block::Paragraph {
+            spans: std::mem::take(&mut ctx.current_spans),
+        });
+    }
+}
+
+/// Consumes a whole unhandled Start/End subtree (e.g. `Table`, not
+/// implemented until Phase 4) so the event stream stays balanced. Called
+/// right after the subtree's `Start` event has already been consumed.
+fn skip_subtree<'a>(events: &mut impl Iterator<Item = Event<'a>>) {
+    let mut depth: u32 = 1;
+    for event in events.by_ref() {
+        match event {
+            Event::Start(_) => depth += 1,
+            Event::End(_) => {
+                depth -= 1;
+                if depth == 0 {
+                    return;
+                }
             }
-            continue;
+            _ => {}
+        }
+    }
+}
+
+/// Splits `text` on `\n`, dropping the single trailing empty element that a
+/// source string ending in `\n` always produces. Shared by `CodeBlock` and
+/// `HtmlBlock` content, whose source lines both arrive as one or more `Text`/
+/// `Html` chunks each already carrying their own trailing newline.
+fn split_source_lines(text: &str) -> Vec<String> {
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    if lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    lines
+}
+
+/// Forces `dim = true` onto every `Span` reachable inside `blocks`, including
+/// through nested `BlockQuote`/`List`/`FootnoteDef` structure (Section 5:
+/// "quoted text Dim", applied recursively — see plan Open questions).
+/// `CodeBlock`/`Html` content has no per-span styling of its own (their
+/// color/gutter is applied uniformly by `layout.rs`), so there is nothing to
+/// dim on those variants.
+fn force_dim(blocks: &mut [Block]) {
+    for block in blocks {
+        match block {
+            Block::Heading { spans, .. } | Block::Paragraph { spans } => {
+                for span in spans {
+                    span.style.dim = true;
+                }
+            }
+            Block::BlockQuote { blocks } | Block::FootnoteDef { blocks, .. } => {
+                force_dim(blocks);
+            }
+            Block::List { items, .. } => {
+                for item in items {
+                    force_dim(&mut item.blocks);
+                }
+            }
+            Block::CodeBlock { .. } | Block::Html { .. } | Block::Rule => {}
+        }
+    }
+}
+
+/// Parses a `Block::List`'s items: consumes `Item`s (each recursively parsed
+/// via `parse_blocks`) until the list's own `End(List)`.
+fn parse_list<'a>(
+    events: &mut impl Iterator<Item = Event<'a>>,
+    ctx: &mut ParseCtx,
+    depth: u32,
+) -> Vec<ListItem> {
+    let mut items = Vec::new();
+    while let Some(event) = events.next() {
+        match event {
+            Event::End(TagEnd::List(_)) => break,
+            Event::Start(Tag::Item) => {
+                let blocks = parse_blocks(events, ctx, depth, Container::Item);
+                items.push(ListItem {
+                    checked: ctx.pending_checked.take(),
+                    blocks,
+                });
+            }
+            _ => {}
+        }
+    }
+    items
+}
+
+/// Recursive-descent block parser. Handles one block-level container's worth
+/// of content — the whole document (`Container::TopLevel`, stopping only when
+/// `events` is exhausted) or one nested container (stopping at the `TagEnd`
+/// `container` recognizes, per `Container::is_closed_by`). `depth` is the
+/// list/blockquote nesting depth, used only to decide whether a `Heading`
+/// contributes a `TocEntry` (see the Phase 3 plan's Open questions: TOC scope
+/// is top-level-only, since `TocEntry::block_index` only makes sense against
+/// top-level `Document.blocks`).
+///
+/// Inline-level events (`Text`, `Code`, breaks, styles, links, images,
+/// footnote references, inline HTML) are handled exactly as before Phase 3,
+/// accumulating into `ctx.current_spans` — this works unchanged whether
+/// they're wrapped in an explicit `Paragraph`/`Heading` or arrive bare at
+/// block scope (a tight list item's content).
+fn parse_blocks<'a>(
+    events: &mut impl Iterator<Item = Event<'a>>,
+    ctx: &mut ParseCtx,
+    depth: u32,
+    container: Container,
+) -> Vec<Block> {
+    let mut blocks = Vec::new();
+
+    while let Some(event) = events.next() {
+        if let Event::End(ref end) = event {
+            if container.is_closed_by(end) {
+                flush_pending_paragraph(&mut blocks, ctx);
+                break;
+            }
         }
 
         match event {
             Event::Start(Tag::Paragraph) => {
-                current_spans.clear();
+                ctx.current_spans.clear();
             }
             Event::Start(Tag::Heading { .. }) => {
-                current_spans.clear();
+                flush_pending_paragraph(&mut blocks, ctx);
+                ctx.current_spans.clear();
             }
             Event::Start(Tag::Strong) => {
-                let mut style = *style_stack.last().unwrap();
+                let mut style = *ctx.style_stack.last().unwrap();
                 style.bold = true;
-                style_stack.push(style);
+                ctx.style_stack.push(style);
             }
             Event::Start(Tag::Emphasis) => {
-                let mut style = *style_stack.last().unwrap();
+                let mut style = *ctx.style_stack.last().unwrap();
                 style.italic = true;
-                style_stack.push(style);
+                ctx.style_stack.push(style);
             }
             Event::Start(Tag::Strikethrough) => {
-                let mut style = *style_stack.last().unwrap();
+                let mut style = *ctx.style_stack.last().unwrap();
                 style.strikethrough = true;
-                style_stack.push(style);
+                ctx.style_stack.push(style);
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
-                let start = match image_alt_stack.last() {
+                let start = match ctx.image_alt_stack.last() {
                     Some(alt) => LinkTextStart::Alt(alt.len()),
-                    None => LinkTextStart::Spans(current_spans.len()),
+                    None => LinkTextStart::Spans(ctx.current_spans.len()),
                 };
-                link_stack.push((dest_url.into_string(), start));
-                let mut style = *style_stack.last().unwrap();
+                ctx.link_stack.push((dest_url.into_string(), start));
+                let mut style = *ctx.style_stack.last().unwrap();
                 style.fg = Some(style::LINK);
                 style.underline = true;
-                style_stack.push(style);
+                ctx.style_stack.push(style);
             }
             Event::Start(Tag::Image { .. }) => {
-                image_alt_stack.push(String::new());
+                ctx.image_alt_stack.push(String::new());
             }
             Event::End(TagEnd::Paragraph) => {
                 blocks.push(Block::Paragraph {
-                    spans: std::mem::take(&mut current_spans),
+                    spans: std::mem::take(&mut ctx.current_spans),
                 });
             }
             Event::End(TagEnd::Heading(level)) => {
                 let level = heading_level_to_u8(level);
-                let mut spans = std::mem::take(&mut current_spans);
+                let mut spans = std::mem::take(&mut ctx.current_spans);
                 if level == 1 {
                     for span in &mut spans {
                         span.text = span.text.to_uppercase();
                     }
                 }
-                let text: String = spans.iter().map(|s| s.text.as_str()).collect();
-                headings.push(TocEntry {
-                    level,
-                    text,
-                    block_index: blocks.len(),
-                });
+                if depth == 0 {
+                    let text: String = spans.iter().map(|s| s.text.as_str()).collect();
+                    ctx.headings.push(TocEntry {
+                        level,
+                        text,
+                        block_index: blocks.len(),
+                    });
+                }
                 blocks.push(Block::Heading { level, spans });
             }
             Event::End(TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough) => {
-                style_stack.pop();
+                ctx.style_stack.pop();
             }
             Event::End(TagEnd::Link) => {
-                style_stack.pop();
-                let (dest_url, start) = link_stack.pop().unwrap();
+                ctx.style_stack.pop();
+                let (dest_url, start) = ctx.link_stack.pop().unwrap();
                 let rendered_text = match start {
-                    LinkTextStart::Spans(i) => {
-                        current_spans[i..].iter().map(|s| s.text.as_str()).collect()
-                    }
+                    LinkTextStart::Spans(i) => ctx.current_spans[i..]
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect(),
                     // `image_alt_stack`'s top is guaranteed to still be the
                     // same entry the Link started under: Image Start/End
                     // pairs are always fully balanced within a Link's own
                     // Start/End, so the stack depth here matches Start(Link)'s.
-                    LinkTextStart::Alt(i) => image_alt_stack
+                    LinkTextStart::Alt(i) => ctx
+                        .image_alt_stack
                         .last()
                         .map(|alt| alt[i..].to_string())
                         .unwrap_or_default(),
@@ -188,11 +350,11 @@ pub fn build_document(markdown: &str) -> Document {
                 // link's rendered plain text equals its destination URL.
                 if rendered_text != dest_url {
                     let suffix = format!(" ({dest_url})");
-                    match image_alt_stack.last_mut() {
+                    match ctx.image_alt_stack.last_mut() {
                         // Alt text is always plain/unstyled, so the suffix
                         // just extends it rather than becoming its own Span.
                         Some(alt) => alt.push_str(&suffix),
-                        None => current_spans.push(Span {
+                        None => ctx.current_spans.push(Span {
                             text: suffix,
                             style: Style {
                                 dim: true,
@@ -203,15 +365,15 @@ pub fn build_document(markdown: &str) -> Document {
                 }
             }
             Event::End(TagEnd::Image) => {
-                let alt = image_alt_stack.pop().unwrap_or_default();
-                match image_alt_stack.last_mut() {
+                let alt = ctx.image_alt_stack.pop().unwrap_or_default();
+                match ctx.image_alt_stack.last_mut() {
                     // Nested inside another Image's alt text: fold this
                     // image down to its plain alt text (no brackets — the
                     // outer alt text is plain, unstyled content) rather than
                     // leaking a Span into current_spans while the outer
                     // image is still open.
                     Some(outer_alt) => outer_alt.push_str(&alt),
-                    None => current_spans.push(Span {
+                    None => ctx.current_spans.push(Span {
                         text: format!("[image: {alt}]"),
                         style: Style {
                             dim: true,
@@ -221,37 +383,121 @@ pub fn build_document(markdown: &str) -> Document {
                 }
             }
             Event::Rule => {
+                flush_pending_paragraph(&mut blocks, ctx);
                 blocks.push(Block::Rule);
             }
-            Event::Text(text) => {
-                if let Some(alt) = image_alt_stack.last_mut() {
+            Event::Start(Tag::CodeBlock(kind)) => {
+                flush_pending_paragraph(&mut blocks, ctx);
+                let language = match kind {
+                    pulldown_cmark::CodeBlockKind::Fenced(lang) if !lang.is_empty() => {
+                        Some(lang.into_string())
+                    }
+                    _ => None,
+                };
+                let mut text = String::new();
+                for event in events.by_ref() {
+                    match event {
+                        Event::Text(t) => text.push_str(&t),
+                        Event::End(TagEnd::CodeBlock) => break,
+                        _ => break,
+                    }
+                }
+                blocks.push(Block::CodeBlock {
+                    language,
+                    lines: split_source_lines(&text),
+                });
+            }
+            Event::Start(Tag::BlockQuote(_)) => {
+                flush_pending_paragraph(&mut blocks, ctx);
+                let mut inner = parse_blocks(events, ctx, depth + 1, Container::BlockQuote);
+                force_dim(&mut inner);
+                blocks.push(Block::BlockQuote { blocks: inner });
+            }
+            Event::Start(Tag::List(start)) => {
+                flush_pending_paragraph(&mut blocks, ctx);
+                let items = parse_list(events, ctx, depth + 1);
+                blocks.push(Block::List {
+                    ordered: start,
+                    items,
+                });
+            }
+            Event::Start(Tag::HtmlBlock) => {
+                flush_pending_paragraph(&mut blocks, ctx);
+                let mut text = String::new();
+                for event in events.by_ref() {
+                    match event {
+                        Event::Html(t) => text.push_str(&t),
+                        Event::End(TagEnd::HtmlBlock) => break,
+                        _ => break,
+                    }
+                }
+                blocks.push(Block::Html {
+                    lines: split_source_lines(&text),
+                });
+            }
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                flush_pending_paragraph(&mut blocks, ctx);
+                let inner = parse_blocks(events, ctx, depth + 1, Container::FootnoteDefinition);
+                ctx.footnotes.push((label.into_string(), inner));
+            }
+            Event::InlineHtml(text) => {
+                if let Some(alt) = ctx.image_alt_stack.last_mut() {
                     alt.push_str(&text);
                 } else {
-                    current_spans.push(Span {
+                    ctx.current_spans.push(Span {
                         text: text.into_string(),
-                        style: *style_stack.last().unwrap(),
+                        style: Style {
+                            dim: true,
+                            ..*ctx.style_stack.last().unwrap()
+                        },
+                    });
+                }
+            }
+            Event::FootnoteReference(label) => {
+                let span = Span {
+                    text: format!("[^{label}]"),
+                    style: Style {
+                        dim: true,
+                        ..*ctx.style_stack.last().unwrap()
+                    },
+                };
+                match ctx.image_alt_stack.last_mut() {
+                    Some(alt) => alt.push_str(&span.text),
+                    None => ctx.current_spans.push(span),
+                }
+            }
+            Event::TaskListMarker(checked) => {
+                ctx.pending_checked = Some(checked);
+            }
+            Event::Text(text) => {
+                if let Some(alt) = ctx.image_alt_stack.last_mut() {
+                    alt.push_str(&text);
+                } else {
+                    ctx.current_spans.push(Span {
+                        text: text.into_string(),
+                        style: *ctx.style_stack.last().unwrap(),
                     });
                 }
             }
             Event::Code(text) => {
-                if let Some(alt) = image_alt_stack.last_mut() {
+                if let Some(alt) = ctx.image_alt_stack.last_mut() {
                     alt.push_str(&text);
                 } else {
-                    let mut code_style = *style_stack.last().unwrap();
+                    let mut code_style = *ctx.style_stack.last().unwrap();
                     code_style.fg = Some(style::CODE);
-                    current_spans.push(Span {
+                    ctx.current_spans.push(Span {
                         text: text.into_string(),
                         style: code_style,
                     });
                 }
             }
             Event::SoftBreak => {
-                if let Some(alt) = image_alt_stack.last_mut() {
+                if let Some(alt) = ctx.image_alt_stack.last_mut() {
                     alt.push(' ');
                 } else {
-                    current_spans.push(Span {
+                    ctx.current_spans.push(Span {
                         text: " ".to_string(),
-                        style: *style_stack.last().unwrap(),
+                        style: *ctx.style_stack.last().unwrap(),
                     });
                 }
             }
@@ -261,19 +507,49 @@ pub fn build_document(markdown: &str) -> Document {
                 // inside a Text event (source line breaks arrive as separate
                 // SoftBreak/HardBreak events), so this can only mean "break
                 // here" and never appear as real content.
-                current_spans.push(Span {
+                ctx.current_spans.push(Span {
                     text: "\n".to_string(),
                     style: Style::default(),
                 });
             }
             Event::Start(_) => {
-                skip_depth = 1;
+                skip_subtree(events);
             }
             _ => {}
         }
     }
 
-    Document { blocks, headings }
+    blocks
+}
+
+/// Parses `markdown` into a `Document`. Block-level tags this phase doesn't
+/// implement yet (`Table` and friends — Phase 4) are skipped as a balanced
+/// subtree via `skip_subtree`, contributing no `Block`/`Span` and never
+/// panicking.
+pub fn build_document(markdown: &str) -> Document {
+    let options = Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES;
+    let mut events = Parser::new_ext(markdown, options);
+
+    let mut ctx = ParseCtx::new();
+    let mut blocks = parse_blocks(&mut events, &mut ctx, 0, Container::TopLevel);
+
+    if !ctx.footnotes.is_empty() {
+        blocks.push(Block::Rule);
+        for (label, footnote_blocks) in ctx.footnotes.drain(..) {
+            blocks.push(Block::FootnoteDef {
+                label,
+                blocks: footnote_blocks,
+            });
+        }
+    }
+
+    Document {
+        blocks,
+        headings: ctx.headings,
+    }
 }
 
 #[cfg(test)]
@@ -600,5 +876,307 @@ mod tests {
                 ],
             }]
         );
+    }
+
+    #[test]
+    fn fenced_code_block_with_language_captures_lines_and_language() {
+        let doc = build_document("```rust\nfn main() {}\nlet x = 1;\n```");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::CodeBlock {
+                language: Some("rust".to_string()),
+                lines: vec!["fn main() {}".to_string(), "let x = 1;".to_string()],
+            }]
+        );
+    }
+
+    #[test]
+    fn fenced_code_block_without_language_has_no_language() {
+        let doc = build_document("```\nplain\n```");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::CodeBlock {
+                language: None,
+                lines: vec!["plain".to_string()],
+            }]
+        );
+    }
+
+    #[test]
+    fn indented_code_block_has_no_language() {
+        let doc = build_document("    indented line");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::CodeBlock {
+                language: None,
+                lines: vec!["indented line".to_string()],
+            }]
+        );
+    }
+
+    #[test]
+    fn empty_fenced_code_block_has_no_lines() {
+        let doc = build_document("```\n```");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::CodeBlock {
+                language: None,
+                lines: vec![],
+            }]
+        );
+    }
+
+    #[test]
+    fn single_level_blockquote_dims_its_paragraph() {
+        let doc = build_document("> quoted text");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::BlockQuote {
+                blocks: vec![Block::Paragraph {
+                    spans: vec![Span {
+                        text: "quoted text".to_string(),
+                        style: Style {
+                            dim: true,
+                            ..Style::default()
+                        },
+                    }],
+                }],
+            }]
+        );
+    }
+
+    #[test]
+    fn nested_blockquote_dims_both_levels() {
+        let doc = build_document("> outer\n> > inner");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::BlockQuote {
+                blocks: vec![
+                    Block::Paragraph {
+                        spans: vec![Span {
+                            text: "outer".to_string(),
+                            style: Style {
+                                dim: true,
+                                ..Style::default()
+                            },
+                        }],
+                    },
+                    Block::BlockQuote {
+                        blocks: vec![Block::Paragraph {
+                            spans: vec![Span {
+                                text: "inner".to_string(),
+                                style: Style {
+                                    dim: true,
+                                    ..Style::default()
+                                },
+                            }],
+                        }],
+                    },
+                ],
+            }]
+        );
+    }
+
+    #[test]
+    fn blockquote_containing_code_block_leaves_code_lines_undimmed() {
+        // force_dim only touches Span-bearing blocks (Heading/Paragraph); a
+        // CodeBlock's lines carry no per-span style (layout.rs colors them
+        // uniformly), so there's nothing to dim.
+        let doc = build_document("> ```\n> code\n> ```");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::BlockQuote {
+                blocks: vec![Block::CodeBlock {
+                    language: None,
+                    lines: vec!["code".to_string()],
+                }],
+            }]
+        );
+    }
+
+    #[test]
+    fn unordered_list_produces_bullet_items() {
+        let doc = build_document("- a\n- b");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::List {
+                ordered: None,
+                items: vec![
+                    ListItem {
+                        checked: None,
+                        blocks: vec![Block::Paragraph {
+                            spans: vec![Span {
+                                text: "a".to_string(),
+                                style: Style::default(),
+                            }],
+                        }],
+                    },
+                    ListItem {
+                        checked: None,
+                        blocks: vec![Block::Paragraph {
+                            spans: vec![Span {
+                                text: "b".to_string(),
+                                style: Style::default(),
+                            }],
+                        }],
+                    },
+                ],
+            }]
+        );
+    }
+
+    #[test]
+    fn ordered_list_keeps_custom_start_number() {
+        let doc = build_document("3. a\n4. b");
+        match &doc.blocks[0] {
+            Block::List { ordered, items } => {
+                assert_eq!(*ordered, Some(3));
+                assert_eq!(items.len(), 2);
+            }
+            other => panic!("expected List, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn task_list_items_carry_checked_state() {
+        let doc = build_document("- [ ] todo\n- [x] done");
+        match &doc.blocks[0] {
+            Block::List { items, .. } => {
+                assert_eq!(items[0].checked, Some(false));
+                assert_eq!(items[1].checked, Some(true));
+            }
+            other => panic!("expected List, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn three_level_nested_mixed_list() {
+        let doc = build_document("- a\n  1. b\n     - c\n- d");
+        let Block::List { items, .. } = &doc.blocks[0] else {
+            panic!("expected top-level List");
+        };
+        assert_eq!(items.len(), 2);
+        // First item: "a" paragraph plus a nested ordered list.
+        assert_eq!(items[0].blocks.len(), 2);
+        let Block::List {
+            ordered: Some(1),
+            items: level2,
+        } = &items[0].blocks[1]
+        else {
+            panic!("expected nested ordered List, got {:?}", items[0].blocks[1]);
+        };
+        assert_eq!(level2.len(), 1);
+        assert_eq!(level2[0].blocks.len(), 2);
+        assert!(matches!(
+            level2[0].blocks[1],
+            Block::List { ordered: None, .. }
+        ));
+    }
+
+    #[test]
+    fn html_block_captures_verbatim_lines() {
+        let doc = build_document("<div>\nhello\n</div>\n\npara after");
+        assert_eq!(
+            doc.blocks,
+            vec![
+                Block::Html {
+                    lines: vec![
+                        "<div>".to_string(),
+                        "hello".to_string(),
+                        "</div>".to_string()
+                    ],
+                },
+                Block::Paragraph {
+                    spans: vec![Span {
+                        text: "para after".to_string(),
+                        style: Style::default(),
+                    }],
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn inline_html_becomes_a_dim_span_inside_the_paragraph() {
+        let spans = only_paragraph_spans("before <span>x</span> after");
+        assert_eq!(
+            spans,
+            vec![
+                Span {
+                    text: "before ".to_string(),
+                    style: Style::default(),
+                },
+                Span {
+                    text: "<span>".to_string(),
+                    style: Style {
+                        dim: true,
+                        ..Style::default()
+                    },
+                },
+                Span {
+                    text: "x".to_string(),
+                    style: Style::default(),
+                },
+                Span {
+                    text: "</span>".to_string(),
+                    style: Style {
+                        dim: true,
+                        ..Style::default()
+                    },
+                },
+                Span {
+                    text: " after".to_string(),
+                    style: Style::default(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn footnote_reference_and_definition_round_trip() {
+        let doc = build_document("text[^1] more\n\n[^1]: note body");
+        assert_eq!(
+            doc.blocks,
+            vec![
+                Block::Paragraph {
+                    spans: vec![
+                        Span {
+                            text: "text".to_string(),
+                            style: Style::default(),
+                        },
+                        Span {
+                            text: "[^1]".to_string(),
+                            style: Style {
+                                dim: true,
+                                ..Style::default()
+                            },
+                        },
+                        Span {
+                            text: " more".to_string(),
+                            style: Style::default(),
+                        },
+                    ],
+                },
+                Block::Rule,
+                Block::FootnoteDef {
+                    label: "1".to_string(),
+                    blocks: vec![Block::Paragraph {
+                        spans: vec![Span {
+                            text: "note body".to_string(),
+                            style: Style::default(),
+                        }],
+                    }],
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn footnote_definition_before_reference_in_source_still_renders_at_the_end() {
+        let doc = build_document("[^1]: note body\n\ntext[^1] more");
+        assert_eq!(doc.blocks.len(), 3);
+        assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
+        assert_eq!(doc.blocks[1], Block::Rule);
+        assert!(matches!(doc.blocks[2], Block::FootnoteDef { .. }));
     }
 }
