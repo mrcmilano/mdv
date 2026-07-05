@@ -111,7 +111,7 @@ narrow reading of unambiguous adjacent spec text, not a product decision):
 - [x] 11. `layout.rs`: `List` rendering — bullet by level (`•`/`◦`/`▪`) or ordinal (`N.` from the item's own start number) or checkbox (`[✓]`/`[ ]`, green when checked) as the first-line marker; continuation-line padding of equal width; 2-space additional indent per nesting level. Unit tests: 3-level nested list continuation alignment (Section 9's Phase 3 acceptance criterion), ordered list with a 2-digit item number, task list checkbox colors.
 - [x] 12. `layout.rs`: `Html` block rendering — dim verbatim lines, truncated like `CodeBlock` but without a gutter/language line. Unit test: overflow truncation + dim styling.
 - [x] 13. `layout.rs`: `FootnoteDef` rendering — `[^label]: ` prefix on the first line, continuation lines padded to align under the content. Unit test: definition appears after a rule at document end, multi-line definition content aligns.
-- [ ] 14. Extend `tests/corpus.md` with one instance of every new element (3-level nested list, nested blockquote, a code block with and without a language, raw HTML, task list, footnotes — per Section 10) and regenerate `tests/snapshots/corpus.txt` via `UPDATE_SNAPSHOTS=1`. Extend `corpus_renders_without_panicking_at_narrow_widths` coverage naturally (same corpus file, no code change needed there).
+- [x] 14. Extend `tests/corpus.md` with one instance of every new element (3-level nested list, nested blockquote, a code block with and without a language, raw HTML, task list, footnotes — per Section 10) and regenerate `tests/snapshots/corpus.txt` via `UPDATE_SNAPSHOTS=1`. Extend `corpus_renders_without_panicking_at_narrow_widths` coverage naturally (same corpus file, no code change needed there).
 
 ### Finish
 
