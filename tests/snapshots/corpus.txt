@@ -80,6 +80,18 @@ Inline HTML like <span>this</span> stays dim inline.
 
 A sentence with a footnote reference[^note].
 
+**Tables**
+**──────**
+
+┌─────────────────────┬───────────────────────────┬────────────────────────────┐
+│ **Left** **aligned** **column** │      **Centered** **column**      │  **Right** **aligned** **column** **with** │
+│                     │                           │              **a** **long** **header** │
+├─────────────────────┼───────────────────────────┼────────────────────────────┤
+│ short               │ a longer cell value that  │                          1 │
+│                     │     will need to wrap     │                            │
+│ **bold** and `code`       │             y             │                          2 │
+└─────────────────────┴───────────────────────────┴────────────────────────────┘
+
 ────────────────────────────────────────────────────────────────────────────────
 
 [^note]: The footnote's body text.
