@@ -97,6 +97,7 @@ enum Container {
     BlockQuote,
     Item,
     FootnoteDefinition,
+    TableCell,
 }
 
 impl Container {
@@ -106,6 +107,7 @@ impl Container {
             (Container::BlockQuote, TagEnd::BlockQuote(_))
                 | (Container::Item, TagEnd::Item)
                 | (Container::FootnoteDefinition, TagEnd::FootnoteDefinition)
+                | (Container::TableCell, TagEnd::TableCell)
         )
     }
 }
@@ -258,6 +260,41 @@ fn parse_list<'a, I: Iterator<Item = Event<'a>>>(
         }
     }
     items
+}
+
+/// Parses one table row's worth of `TableCell`s (either the header row or a
+/// body row — both are just a flat sequence of cells, so the same loop
+/// handles either, stopping at whichever of `TagEnd::TableHead` /
+/// `TagEnd::TableRow` actually closes it). Each cell's content is inline-only
+/// per CommonMark's table grammar (confirmed empirically — see plan Impact
+/// assessment), so recursing into `parse_blocks` with `Container::TableCell`
+/// reuses the existing inline-accumulation machinery unchanged; the single
+/// `Block::Paragraph` it flushes at `End(TableCell)` is unwrapped back down
+/// to a plain `Vec<Span>` (an empty cell contributes no blocks at all, not
+/// an empty `Paragraph`, so that case maps to `Vec::new()` too).
+fn parse_table_row<'a, I: Iterator<Item = Event<'a>>>(
+    events: &mut std::iter::Peekable<I>,
+    ctx: &mut ParseCtx,
+    depth: u32,
+) -> Vec<Vec<Span>> {
+    let mut cells = Vec::new();
+    loop {
+        match events.next() {
+            Some(Event::Start(Tag::TableCell)) => {
+                let cell_blocks = parse_blocks(events, ctx, depth, Container::TableCell);
+                let spans = match cell_blocks.into_iter().next() {
+                    Some(Block::Paragraph { spans }) => spans,
+                    _ => Vec::new(),
+                };
+                cells.push(spans);
+            }
+            Some(Event::End(TagEnd::TableHead)) | Some(Event::End(TagEnd::TableRow)) | None => {
+                break
+            }
+            _ => {}
+        }
+    }
+    cells
 }
 
 /// Recursive-descent block parser. Handles one block-level container's worth
@@ -464,6 +501,28 @@ fn parse_blocks<'a, I: Iterator<Item = Event<'a>>>(
                 flush_pending_paragraph(&mut blocks, ctx);
                 let inner = parse_blocks(events, ctx, depth + 1, Container::FootnoteDefinition);
                 ctx.footnotes.push((label.into_string(), inner));
+            }
+            Event::Start(Tag::Table(alignments)) => {
+                flush_pending_paragraph(&mut blocks, ctx);
+                let mut header = Vec::new();
+                let mut rows = Vec::new();
+                loop {
+                    match events.next() {
+                        Some(Event::Start(Tag::TableHead)) => {
+                            header = parse_table_row(events, ctx, depth);
+                        }
+                        Some(Event::Start(Tag::TableRow)) => {
+                            rows.push(parse_table_row(events, ctx, depth));
+                        }
+                        Some(Event::End(TagEnd::Table)) | None => break,
+                        _ => {}
+                    }
+                }
+                blocks.push(Block::Table {
+                    header,
+                    rows,
+                    alignments,
+                });
             }
             Event::InlineHtml(text) => {
                 if let Some(alt) = ctx.image_alt_stack.last_mut() {
@@ -1221,5 +1280,88 @@ mod tests {
         assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
         assert_eq!(doc.blocks[1], Block::Rule);
         assert!(matches!(doc.blocks[2], Block::FootnoteDef { .. }));
+    }
+
+    fn plain_cell(text: &str) -> Vec<Span> {
+        vec![Span {
+            text: text.to_string(),
+            style: Style::default(),
+        }]
+    }
+
+    #[test]
+    fn table_header_and_row_capture_cells_and_alignments() {
+        let doc = build_document("| a | b |\n|:--|--:|\n| 1 | 2 |");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::Table {
+                header: vec![plain_cell("a"), plain_cell("b")],
+                rows: vec![vec![plain_cell("1"), plain_cell("2")]],
+                alignments: vec![Alignment::Left, Alignment::Right],
+            }]
+        );
+    }
+
+    #[test]
+    fn table_alignment_markers_round_trip_all_four_kinds() {
+        let doc = build_document("| a | b | c | d |\n|---|:--|:-:|--:|\n| 1 | 2 | 3 | 4 |");
+        match &doc.blocks[0] {
+            Block::Table { alignments, .. } => {
+                assert_eq!(
+                    alignments,
+                    &vec![
+                        Alignment::None,
+                        Alignment::Left,
+                        Alignment::Center,
+                        Alignment::Right,
+                    ]
+                );
+            }
+            other => panic!("expected Table, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn table_cell_with_styled_inline_content() {
+        let doc = build_document("| a |\n|---|\n| **bold** and `code` |");
+        match &doc.blocks[0] {
+            Block::Table { rows, .. } => {
+                assert_eq!(
+                    rows[0][0],
+                    vec![
+                        Span {
+                            text: "bold".to_string(),
+                            style: Style {
+                                bold: true,
+                                ..Style::default()
+                            },
+                        },
+                        Span {
+                            text: " and ".to_string(),
+                            style: Style::default(),
+                        },
+                        Span {
+                            text: "code".to_string(),
+                            style: Style {
+                                fg: Some(style::CODE),
+                                ..Style::default()
+                            },
+                        },
+                    ]
+                );
+            }
+            other => panic!("expected Table, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn table_with_empty_cell_produces_no_spans() {
+        let doc = build_document("| a | b |\n|---|---|\n| 1 |  |");
+        match &doc.blocks[0] {
+            Block::Table { rows, .. } => {
+                assert_eq!(rows[0][1], Vec::<Span>::new());
+            }
+            other => panic!("expected Table, got {other:?}"),
+        }
     }
 }
