@@ -1,0 +1,13 @@
+[package]
+name = "mdv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pulldown-cmark = { version = "0.13", default-features = false }
+crossterm = "0.29"
+unicode-width = "0.2"
+
+[profile.release]
+lto = true
+strip = true
