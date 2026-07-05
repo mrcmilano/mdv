@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-6-phase4-tables`
 _Date:_ 2026-07-05
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #6
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -85,17 +85,22 @@ rules. Implementation-level gaps filled with these assumptions:
 
 ### Finish
 
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
-      (FIX REQUIRED: add tasks to Implementation above and complete them;
-       LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #6` to PR description;
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass (114 passing)
+- [x] Run `/skill:adversarial-review` — PASS after empirically verifying two
+      edge cases (ESC-injection in cell content — clean, reuses `wrap_spans`'
+      existing sanitization; header-only table with zero body rows — added
+      a regression test). No FIX REQUIRED findings.
+- [x] Run `/skill:pre-merge-code-review` — APPROVE after strengthening one
+      weak test (width-40 shrink test only checked for no panic, not actual
+      correctness) and merging a duplicated width-computation helper
+      (`cell_display_width` into `heading_underline_width`'s shared logic).
+- [x] Update `README.md` if affected (status line updated for Phase 4)
+- [x] Convert draft PR to ready-for-review; add `Closes #6` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
-      `gh issue edit 6 --remove-label agent --remove-label "in progress" --add-label needs-review`
-      (superseded for this autonomous run — see AGENTS.md override in effect)
+- [x] Autonomous run (per /goal override): merge PR into develop and
+      `gh issue close 6` directly, instead of the human-review label
+      round-trip in AGENTS.md §1 step 5.
 
 ---
 
