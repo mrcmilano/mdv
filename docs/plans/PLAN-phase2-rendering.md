@@ -122,14 +122,22 @@ if implementation reveals a problem):
       Verified via a pty + `pyte` terminal-emulation harness (same approach as Phase 1): spawned the real debug binary under a pseudo-TTY at 100x30, fed `tests/corpus.md`, and inspected the emulated screen buffer plus its bold/color cell attributes. Results: (1) all Phase 2 elements rendered as specified — heading colors/bold per level, `§ ` prefix on H4–H6, `═`/`─` underlines sized correctly, dim rule spanning the full content width, link text followed by a dim `(url)` suffix, autolink with no suffix, image alt placeholder, CJK/emoji intact; (2) resizing the pty from 100 to 40 columns and sending `SIGWINCH` triggered a live reflow — the same corpus re-wrapped correctly at the new width, headings/rules resized to the new content width; (3) a dedicated narrow-width (10 cols) test with a single 26-char bold word confirmed the word splits across 3 lines with every fragment carrying the bold attribute in the emulated screen buffer.
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `cargo audit` — confirm still clean (no new dependencies added this phase)
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass (66 passed)
+- [x] Run `cargo audit` — confirm still clean (no new dependencies added this phase)
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `docs/architecture.md` if actual module boundaries/data flow diverge from what's documented there (beyond the `Style.underline` fix already folded into task 1)
-- [ ] Update `README.md` if affected
+      One FIX REQUIRED finding (heading with no content producing an
+      out-of-bounds/misattributed `heading_lines` index) — fixed; re-ran the
+      skill, second pass PASS. One LOW finding (grapheme-cluster wrap
+      splitting) deferred — see Deferred findings below.
+- [x] Update `docs/architecture.md` if actual module boundaries/data flow diverge from what's documented there (beyond the `Style.underline` fix already folded into task 1)
+      No divergence — the existing module layout, data flow, and boundaries
+      sections already describe exactly what Phase 2 built (they were
+      written in anticipation of it during Phase 1).
+- [x] Update `README.md` if affected — updated the status line from Phase 1
+      to Phases 1–2.
 - [ ] Convert draft PR to ready-for-review; add `Closes #4` to PR description;
       set this plan's `_Status:_` to `READY`
 - [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
