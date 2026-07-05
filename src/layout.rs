@@ -1,3 +1,4 @@
+use pulldown_cmark::Alignment;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::render::{Block, Document, ListItem};
@@ -356,8 +357,11 @@ fn wrap_block(block: &Block, content_width: usize, list_level: u32) -> Vec<Line>
         Block::FootnoteDef { label, blocks } => {
             wrap_footnote_def(label, blocks, content_width, list_level)
         }
-        // Temporary: real rendering lands with Phase 4 plan task 5.
-        Block::Table { .. } => Vec::new(),
+        Block::Table {
+            header,
+            rows,
+            alignments,
+        } => wrap_table(header, rows, alignments, content_width),
     }
 }
 
@@ -549,6 +553,198 @@ fn wrap_footnote_def(
             Line { spans }
         })
         .collect()
+}
+
+/// A cell's pre-wrap display width: its spans' sanitized text concatenated
+/// (mirrors `heading_underline_width`'s approach).
+fn cell_display_width(spans: &[Span]) -> usize {
+    let text: String = spans.iter().map(|s| sanitize(&s.text)).collect();
+    UnicodeWidthStr::width(text.as_str())
+}
+
+/// Natural (unshrunk) width of each column: the widest cell's display width,
+/// across the header and every row, in that column (build plan Section 5:
+/// "Column widths = max cell display-width"). Floored at 1 so `shrink_columns`
+/// never has to reason about a zero-width column. Cells beyond `num_cols` (a
+/// malformed row with more cells than the header) are ignored; a row with
+/// fewer cells simply doesn't touch the missing columns' widths.
+fn column_natural_widths(
+    header: &[Vec<Span>],
+    rows: &[Vec<Vec<Span>>],
+    num_cols: usize,
+) -> Vec<usize> {
+    let mut widths = vec![1usize; num_cols];
+    for (i, cell) in header.iter().enumerate().take(num_cols) {
+        widths[i] = widths[i].max(cell_display_width(cell));
+    }
+    for row in rows {
+        for (i, cell) in row.iter().enumerate().take(num_cols) {
+            widths[i] = widths[i].max(cell_display_width(cell));
+        }
+    }
+    widths
+}
+
+/// Shrinks columns to fit `content_width` when the natural total (content +
+/// 1-space padding each side + vertical-bar borders) overflows it (build plan
+/// Section 5: "shrink the widest columns"). Repeatedly takes 1 column-width
+/// off whichever column is currently widest (leftmost on a tie), floored at
+/// 1, until it fits or no column can shrink further — the latter means the
+/// table just overflows the terminal at absurdly narrow widths, which
+/// Section 5's "Prefix composition" rule explicitly allows (never panic,
+/// may degrade visually).
+fn shrink_columns_to_fit(mut widths: Vec<usize>, content_width: usize) -> Vec<usize> {
+    let border_and_padding = widths.len() + 1 + widths.len() * 2;
+    loop {
+        let total: usize = widths.iter().sum::<usize>() + border_and_padding;
+        if total <= content_width || widths.iter().all(|&w| w <= 1) {
+            return widths;
+        }
+        let (widest, _) = widths
+            .iter()
+            .enumerate()
+            .max_by_key(|&(i, &w)| (w, std::cmp::Reverse(i)))
+            .unwrap();
+        widths[widest] = widths[widest].saturating_sub(1).max(1);
+    }
+}
+
+/// One box-drawing border/separator line (top `┌─┬─┐`, header separator
+/// `├─┼─┤`, or bottom `└─┴─┘`), sized to each column's final width plus its
+/// 1-space padding on each side.
+fn table_border_line(left: char, mid: char, right: char, column_widths: &[usize]) -> Line {
+    let mut text = String::new();
+    text.push(left);
+    for (i, w) in column_widths.iter().enumerate() {
+        if i > 0 {
+            text.push(mid);
+        }
+        text.push_str(&"─".repeat(w + 2));
+    }
+    text.push(right);
+    Line {
+        spans: vec![Span {
+            text,
+            style: Style::default(),
+        }],
+    }
+}
+
+/// Pads one already-wrapped cell line to its column's final width per its
+/// alignment (`None`/`Left` pad right, `Right` pads left, `Center` splits the
+/// remainder with any odd space going right — Phase 4 plan Open questions).
+fn pad_cell_line(spans: Vec<Span>, column_width: usize, alignment: Alignment) -> Vec<Span> {
+    let text_width: usize = spans
+        .iter()
+        .map(|s| UnicodeWidthStr::width(s.text.as_str()))
+        .sum();
+    let total_pad = column_width.saturating_sub(text_width);
+    let (left_pad, right_pad) = match alignment {
+        Alignment::Right => (total_pad, 0),
+        Alignment::Center => {
+            let left = total_pad / 2;
+            (left, total_pad - left)
+        }
+        Alignment::Left | Alignment::None => (0, total_pad),
+    };
+    let mut result = Vec::with_capacity(spans.len() + 2);
+    if left_pad > 0 {
+        result.push(Span {
+            text: " ".repeat(left_pad),
+            style: Style::default(),
+        });
+    }
+    result.extend(spans);
+    if right_pad > 0 {
+        result.push(Span {
+            text: " ".repeat(right_pad),
+            style: Style::default(),
+        });
+    }
+    result
+}
+
+/// Renders one table row (header or body) to one or more `Line`s: each cell
+/// wraps independently to its column's final width via `wrap_spans`, the row
+/// grows to the tallest wrapped cell, and shorter cells are padded with
+/// blank lines so every column box is a uniform rectangle. `bold_header`
+/// forces every cell's spans bold (build plan Section 5: "header row Bold").
+fn wrap_table_row(
+    cells: &[Vec<Span>],
+    column_widths: &[usize],
+    alignments: &[Alignment],
+    bold_header: bool,
+) -> Vec<Line> {
+    let cell_lines: Vec<Vec<Line>> = column_widths
+        .iter()
+        .enumerate()
+        .map(|(i, &width)| {
+            let mut spans = cells.get(i).cloned().unwrap_or_default();
+            if bold_header {
+                for span in &mut spans {
+                    span.style.bold = true;
+                }
+            }
+            wrap_spans(&spans, width)
+        })
+        .collect();
+    let row_height = cell_lines.iter().map(Vec::len).max().unwrap_or(1).max(1);
+
+    let mut lines = Vec::with_capacity(row_height);
+    for li in 0..row_height {
+        let mut spans = vec![Span {
+            text: "│".to_string(),
+            style: Style::default(),
+        }];
+        for (i, &width) in column_widths.iter().enumerate() {
+            let cell_line_spans = cell_lines[i]
+                .get(li)
+                .map(|line| line.spans.clone())
+                .unwrap_or_default();
+            let alignment = alignments.get(i).copied().unwrap_or(Alignment::None);
+            spans.push(Span {
+                text: " ".to_string(),
+                style: Style::default(),
+            });
+            spans.extend(pad_cell_line(cell_line_spans, width, alignment));
+            spans.push(Span {
+                text: " │".to_string(),
+                style: Style::default(),
+            });
+        }
+        lines.push(Line { spans });
+    }
+    lines
+}
+
+/// Table rendering (build plan Section 5): box-drawing borders, bold header
+/// row, one separator row below the header, un-separated body rows, column
+/// alignment, and in-cell wrapping when the table is wider than
+/// `content_width` (Section 9's Phase 4 acceptance criterion: never panic at
+/// width 40). An empty header (no columns — impossible for a well-formed
+/// CommonMark table, but defensive) contributes no lines.
+fn wrap_table(
+    header: &[Vec<Span>],
+    rows: &[Vec<Vec<Span>>],
+    alignments: &[Alignment],
+    content_width: usize,
+) -> Vec<Line> {
+    let num_cols = header.len();
+    if num_cols == 0 {
+        return Vec::new();
+    }
+    let natural_widths = column_natural_widths(header, rows, num_cols);
+    let column_widths = shrink_columns_to_fit(natural_widths, content_width);
+
+    let mut lines = Vec::new();
+    lines.push(table_border_line('┌', '┬', '┐', &column_widths));
+    lines.extend(wrap_table_row(header, &column_widths, alignments, true));
+    lines.push(table_border_line('├', '┼', '┤', &column_widths));
+    for row in rows {
+        lines.extend(wrap_table_row(row, &column_widths, alignments, false));
+    }
+    lines.push(table_border_line('└', '┴', '┘', &column_widths));
+    lines
 }
 
 /// List rendering: bullet by nesting level (`•`/`◦`/`▪`) or ordinal (`N.`,
@@ -1124,5 +1320,93 @@ mod tests {
             .unwrap();
         let marker_width = "[^1]: ".len();
         assert!(rendered[marker_index + 1].starts_with(&" ".repeat(marker_width)));
+    }
+
+    #[test]
+    fn table_column_widths_match_widest_cell() {
+        let doc = build_document("| a | bb |\n|---|---|\n| ccc | d |");
+        let result = wrap(&doc, 80);
+        // Column 0 widest cell is "ccc" (3), column 1 is "bb" (2); box width
+        // per column is content + 2 padding columns.
+        assert_eq!(result.lines[0].spans[0].text, "┌─────┬────┐");
+    }
+
+    #[test]
+    fn table_shrinks_and_wraps_without_panicking_at_width_40() {
+        let doc = build_document(
+            "| Column One | Column Two | Column Three |\n|---|---|---|\n\
+             | a very long cell value here | another long value | and a third one |",
+        );
+        let result = wrap(&doc, 40);
+        for line in &result.lines {
+            for span in &line.spans {
+                let _ = UnicodeWidthStr::width(span.text.as_str());
+            }
+        }
+        assert!(!result.lines.is_empty());
+    }
+
+    #[test]
+    fn table_never_panics_at_width_one() {
+        let doc = build_document("| a | b |\n|---|---|\n| 1 | 2 |");
+        let _ = wrap(&doc, 1);
+    }
+
+    #[test]
+    fn table_header_row_is_bold() {
+        let doc = build_document("| a |\n|---|\n| 1 |");
+        let result = wrap(&doc, 80);
+        // Row 1 is the header content row (row 0 is the top border).
+        let header_text_span = result.lines[1]
+            .spans
+            .iter()
+            .find(|s| s.text.trim() == "a")
+            .unwrap();
+        assert!(header_text_span.style.bold);
+        let body_text_span = result.lines[3]
+            .spans
+            .iter()
+            .find(|s| s.text.trim() == "1")
+            .unwrap();
+        assert!(!body_text_span.style.bold);
+    }
+
+    #[test]
+    fn table_alignment_markers_pad_correctly() {
+        let doc = build_document("| left | center | right |\n|:--|:-:|--:|\n| x | x | x |");
+        let result = wrap(&doc, 80);
+        let rendered = plain_spans(&result.lines);
+        // Body row: "left" column is 4 wide (widest cell "left"), content "x"
+        // left-aligned == "x   "; "center" column is 6 wide, "x" centered;
+        // "right" column is 5 wide, "x" right-aligned.
+        let body_row = &rendered[3];
+        // left (width 4): 1 leading space + "x" left-padded to 4 + 1 trailing.
+        assert!(body_row.contains("│ x    │"), "got {body_row:?}");
+        // center (width 6): "x" centered (2 left, 3 right) + the 1-space pad
+        // on each side of the column.
+        assert!(body_row.contains("│   x    │"), "got {body_row:?}");
+        // right (width 5): "x" right-padded (4 left) + the 1-space pad.
+        assert!(body_row.contains("│     x │"), "got {body_row:?}");
+    }
+
+    #[test]
+    fn table_wrapped_cell_content_stays_inside_its_column() {
+        let doc = build_document("| a |\n|---|\n| one two three four |");
+        let result = wrap(&doc, 12);
+        // Column content width here is small enough to force wrapping; every
+        // rendered line's total display width must not exceed the table's
+        // own declared box width (the top border's width).
+        let border_width = UnicodeWidthStr::width(result.lines[0].spans[0].text.as_str());
+        for line in &result.lines {
+            let width: usize = line
+                .spans
+                .iter()
+                .map(|s| UnicodeWidthStr::width(s.text.as_str()))
+                .sum();
+            assert!(
+                width <= border_width,
+                "line wider than table box: {width} > {border_width}"
+            );
+        }
     }
 }
