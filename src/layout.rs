@@ -294,13 +294,20 @@ fn heading_presentation_spans(level: u8, spans: &[Span]) -> Vec<Span> {
     result
 }
 
-/// H1/H2 underline width: the heading's pre-wrap display width (its spans'
-/// sanitized text concatenated), capped at `content_width` (Open questions
-/// assumption — "the width of the text" is ambiguous once the heading itself
-/// wraps at narrow widths).
-fn heading_underline_width(spans: &[Span], content_width: usize) -> usize {
+/// Pre-wrap display width of a span sequence: sanitized text concatenated,
+/// then measured. Shared by heading-underline sizing and table column-width
+/// computation — both need "how wide would this render before any
+/// wrapping," not the wrapped result itself.
+fn spans_display_width(spans: &[Span]) -> usize {
     let text: String = spans.iter().map(|s| sanitize(&s.text)).collect();
-    UnicodeWidthStr::width(text.as_str()).min(content_width)
+    UnicodeWidthStr::width(text.as_str())
+}
+
+/// H1/H2 underline width: the heading's pre-wrap display width, capped at
+/// `content_width` (Open questions assumption — "the width of the text" is
+/// ambiguous once the heading itself wraps at narrow widths).
+fn heading_underline_width(spans: &[Span], content_width: usize) -> usize {
+    spans_display_width(spans).min(content_width)
 }
 
 /// Renders one `Block` to `Line`s at `content_width`. `list_level` is the
@@ -555,13 +562,6 @@ fn wrap_footnote_def(
         .collect()
 }
 
-/// A cell's pre-wrap display width: its spans' sanitized text concatenated
-/// (mirrors `heading_underline_width`'s approach).
-fn cell_display_width(spans: &[Span]) -> usize {
-    let text: String = spans.iter().map(|s| sanitize(&s.text)).collect();
-    UnicodeWidthStr::width(text.as_str())
-}
-
 /// Natural (unshrunk) width of each column: the widest cell's display width,
 /// across the header and every row, in that column (build plan Section 5:
 /// "Column widths = max cell display-width"). Floored at 1 so `shrink_columns`
@@ -575,11 +575,11 @@ fn column_natural_widths(
 ) -> Vec<usize> {
     let mut widths = vec![1usize; num_cols];
     for (i, cell) in header.iter().enumerate().take(num_cols) {
-        widths[i] = widths[i].max(cell_display_width(cell));
+        widths[i] = widths[i].max(spans_display_width(cell));
     }
     for row in rows {
         for (i, cell) in row.iter().enumerate().take(num_cols) {
-            widths[i] = widths[i].max(cell_display_width(cell));
+            widths[i] = widths[i].max(spans_display_width(cell));
         }
     }
     widths
@@ -1333,17 +1333,33 @@ mod tests {
 
     #[test]
     fn table_shrinks_and_wraps_without_panicking_at_width_40() {
+        // pre-merge-code-review finding: the original version of this test
+        // only checked for a panic, which would pass even with a badly
+        // broken shrink/wrap implementation. Assert the actual acceptance
+        // criterion instead: the table box fits content_width, and its
+        // content demonstrably wrapped (more lines than one row each).
         let doc = build_document(
             "| Column One | Column Two | Column Three |\n|---|---|---|\n\
              | a very long cell value here | another long value | and a third one |",
         );
         let result = wrap(&doc, 40);
+        let border_width = UnicodeWidthStr::width(result.lines[0].spans[0].text.as_str());
+        assert!(
+            border_width <= 40,
+            "table box ({border_width}) didn't shrink to fit content_width 40"
+        );
         for line in &result.lines {
-            for span in &line.spans {
-                let _ = UnicodeWidthStr::width(span.text.as_str());
-            }
+            let width: usize = line
+                .spans
+                .iter()
+                .map(|s| UnicodeWidthStr::width(s.text.as_str()))
+                .sum();
+            assert!(width <= 40, "line wider than content_width 40: {width}");
         }
-        assert!(!result.lines.is_empty());
+        // top border + header + separator + bottom border = 4 non-content
+        // lines; the single body row must have wrapped to more than 1 line
+        // given how much text is packed into 3 columns at width 40.
+        assert!(result.lines.len() > 5, "body row didn't wrap: {result:?}");
     }
 
     #[test]
