@@ -425,17 +425,15 @@ fn wrap_code_block(
             text: GUTTER.to_string(),
             style: gutter_style,
         }];
-        spans.push(truncate_verbatim_span(
+        spans.extend(truncate_verbatim(
             &sanitized,
             inner_width,
             Style {
                 fg: Some(style::CODE),
                 ..Style::default()
             },
+            gutter_style,
         ));
-        if let Some(ellipsis) = truncate_ellipsis_if_needed(&sanitized, inner_width, gutter_style) {
-            spans.push(ellipsis);
-        }
         lines.push(Line { spans });
     }
     lines
@@ -453,45 +451,42 @@ fn wrap_html_block(source_lines: &[String], content_width: usize) -> Vec<Line> {
         .iter()
         .map(|raw| {
             let sanitized = sanitize(raw);
-            let mut spans = vec![truncate_verbatim_span(&sanitized, inner_width, dim_style)];
-            if let Some(ellipsis) = truncate_ellipsis_if_needed(&sanitized, inner_width, dim_style)
-            {
-                spans.push(ellipsis);
-            }
+            let spans = truncate_verbatim(&sanitized, inner_width, dim_style, dim_style);
             Line { spans }
         })
         .collect()
 }
 
-/// Returns the leading slice of `sanitized` that fits `inner_width`, leaving
-/// room for a trailing ellipsis if truncation is needed (i.e. it fits within
-/// `inner_width - 1` whenever the full text doesn't fit `inner_width`).
-fn truncate_verbatim_span(sanitized: &str, inner_width: usize, style: Style) -> Span {
-    let (_, rest) = split_at_width(sanitized, inner_width);
-    let fit_width = if rest.is_empty() {
-        inner_width
-    } else {
-        inner_width.saturating_sub(1)
-    };
-    let (fit, _) = split_at_width(sanitized, fit_width);
-    Span {
-        text: fit.to_string(),
-        style,
-    }
-}
-
-/// Companion to `truncate_verbatim_span`: `Some(ellipsis span)` iff the text
-/// didn't fit `inner_width` as-is.
-fn truncate_ellipsis_if_needed(sanitized: &str, inner_width: usize, style: Style) -> Option<Span> {
+/// Truncates `sanitized` to `inner_width`, appending an ellipsis span when it
+/// doesn't fit as-is (leaving room for the ellipsis itself: the content span
+/// then fits within `inner_width - 1`). `content_style` applies to the
+/// content span; `ellipsis_style` to the ellipsis (the two differ for code
+/// blocks, where content is Yellow but the ellipsis stays dim like the
+/// gutter).
+fn truncate_verbatim(
+    sanitized: &str,
+    inner_width: usize,
+    content_style: Style,
+    ellipsis_style: Style,
+) -> Vec<Span> {
     let (_, rest) = split_at_width(sanitized, inner_width);
     if rest.is_empty() {
-        None
-    } else {
-        Some(Span {
-            text: "…".to_string(),
-            style,
-        })
+        return vec![Span {
+            text: sanitized.to_string(),
+            style: content_style,
+        }];
     }
+    let (fit, _) = split_at_width(sanitized, inner_width.saturating_sub(1));
+    vec![
+        Span {
+            text: fit.to_string(),
+            style: content_style,
+        },
+        Span {
+            text: "…".to_string(),
+            style: ellipsis_style,
+        },
+    ]
 }
 
 /// Blockquote rendering: every line (including blank separator lines between
@@ -581,26 +576,59 @@ fn wrap_list(
 
     let mut lines = Vec::new();
     for (i, item) in items.iter().enumerate() {
-        let (marker, marker_style) = match item.checked {
-            Some(true) => (
-                "[✓]".to_string(),
+        let checkbox: Option<(&str, Style)> = match item.checked {
+            Some(true) => Some((
+                "[✓]",
                 Style {
                     fg: Some(style::TASK_CHECKED),
                     ..Style::default()
                 },
-            ),
-            Some(false) => ("[ ]".to_string(), Style::default()),
-            None => match ordered {
-                // saturating: an adversarial start number near u64::MAX
-                // combined with many items must never panic (Section 12).
-                Some(start) => (
-                    format!("{}.", start.saturating_add(i as u64)),
-                    Style::default(),
-                ),
-                None => (bullet_symbol.to_string(), Style::default()),
-            },
+            )),
+            Some(false) => Some(("[ ]", Style::default())),
+            None => None,
         };
-        let marker_width = UnicodeWidthStr::width(marker.as_str());
+        // saturating: an adversarial start number near u64::MAX combined
+        // with many items must never panic (Section 12).
+        let ordinal = ordered.map(|start| format!("{}.", start.saturating_add(i as u64)));
+
+        let mut marker_spans: Vec<Span> = Vec::new();
+        match (ordinal, checkbox) {
+            // An ordered task-list item (e.g. "1. [ ] item" — pulldown-cmark
+            // parses task markers inside ordered lists too); keep both
+            // rather than silently dropping the ordinal.
+            (Some(ordinal), Some((box_text, box_style))) => {
+                marker_spans.push(Span {
+                    text: format!("{ordinal} "),
+                    style: Style::default(),
+                });
+                marker_spans.push(Span {
+                    text: box_text.to_string(),
+                    style: box_style,
+                });
+            }
+            (None, Some((box_text, box_style))) => {
+                marker_spans.push(Span {
+                    text: box_text.to_string(),
+                    style: box_style,
+                });
+            }
+            (Some(ordinal), None) => {
+                marker_spans.push(Span {
+                    text: ordinal,
+                    style: Style::default(),
+                });
+            }
+            (None, None) => {
+                marker_spans.push(Span {
+                    text: bullet_symbol.to_string(),
+                    style: Style::default(),
+                });
+            }
+        }
+        let marker_width: usize = marker_spans
+            .iter()
+            .map(|s| UnicodeWidthStr::width(s.text.as_str()))
+            .sum();
         let first_prefix_width = marker_width + 1;
         let item_content_width = content_width.saturating_sub(first_prefix_width).max(1);
 
@@ -612,10 +640,7 @@ fn wrap_list(
         for (li, line) in item_lines.into_iter().enumerate() {
             let mut spans = Vec::new();
             if li == 0 {
-                spans.push(Span {
-                    text: marker.clone(),
-                    style: marker_style,
-                });
+                spans.extend(marker_spans.iter().cloned());
                 spans.push(Span {
                     text: " ".to_string(),
                     style: Style::default(),
@@ -1046,6 +1071,21 @@ mod tests {
         assert_eq!(result.lines[0].spans[0].style.fg, None);
         assert_eq!(result.lines[1].spans[0].text, "[✓]");
         assert_eq!(result.lines[1].spans[0].style.fg, Some(style::TASK_CHECKED));
+    }
+
+    #[test]
+    fn ordered_task_list_keeps_the_ordinal_alongside_the_checkbox() {
+        // pre-merge-code-review finding: pulldown-cmark allows task markers
+        // inside ordered lists ("1. [ ] item"); dropping the ordinal (as an
+        // earlier version did, treating checked-state as fully replacing
+        // the marker) silently lost information.
+        let doc = build_document("1. [ ] todo\n2. [x] done");
+        let result = wrap(&doc, 80);
+        assert_eq!(
+            plain_spans(&result.lines),
+            vec!["1. [ ] todo", "2. [✓] done"]
+        );
+        assert_eq!(result.lines[1].spans[1].style.fg, Some(style::TASK_CHECKED));
     }
 
     #[test]
