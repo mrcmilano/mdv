@@ -124,7 +124,7 @@ if implementation reveals a problem):
 
 ### Finish
 - [x] Write / update tests for all implementation tasks above
-- [x] Run full test suite — all tests pass (66 passed)
+- [x] Run full test suite — all tests pass (69 passed, after task 10's 3 new tests)
 - [x] Run `cargo audit` — confirm still clean (no new dependencies added this phase)
 - [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
