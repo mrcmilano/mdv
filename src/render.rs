@@ -3,14 +3,27 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use crate::style;
 use crate::style::{Span, Style};
 
-/// Block-level structure before wrapping. Only the variants Phase 2 actually
-/// constructs exist here — `CodeBlock`/`BlockQuote`/`List`/`Table`/etc. are
-/// added when their phases land (see plan Open questions).
+/// Block-level structure before wrapping. `Table`/`Alignment` are added when
+/// Phase 4 lands (see plan Open questions).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Heading { level: u8, spans: Vec<Span> },
     Paragraph { spans: Vec<Span> },
     Rule,
+    CodeBlock { language: Option<String>, lines: Vec<String> },
+    BlockQuote { blocks: Vec<Block> },
+    List { ordered: Option<u64>, items: Vec<ListItem> },
+    Html { lines: Vec<String> },
+    FootnoteDef { label: String, blocks: Vec<Block> },
+}
+
+/// One item of a `Block::List`. `checked` is `None` for a non-task item,
+/// `Some(bool)` for a task-list item (Phase 3 plan Open questions: Section
+/// 4's illustrative `items: Vec<Vec<Block>>` has no field for this state).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListItem {
+    pub checked: Option<bool>,
+    pub blocks: Vec<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

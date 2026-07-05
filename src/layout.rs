@@ -349,6 +349,15 @@ pub fn wrap(document: &Document, terminal_width: usize) -> LayoutResult {
                     }],
                 });
             }
+            // Temporary: real rendering for these lands with the recursive
+            // `wrap_block` refactor (Phase 3 plan task 8). Until then they
+            // contribute no lines, same as being silently skipped upstream
+            // in `render.rs` pre-Phase-3.
+            Block::CodeBlock { .. }
+            | Block::BlockQuote { .. }
+            | Block::List { .. }
+            | Block::Html { .. }
+            | Block::FootnoteDef { .. } => {}
         }
     }
 
