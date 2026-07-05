@@ -1,5 +1,6 @@
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
+use crate::style;
 use crate::style::{Span, Style};
 
 /// Block-level structure before wrapping. Only the variants Phase 2 actually
@@ -52,6 +53,11 @@ pub fn build_document(markdown: &str) -> Document {
     let mut blocks = Vec::new();
     let mut headings = Vec::new();
     let mut current_spans: Vec<Span> = Vec::new();
+    // Nestable style stack (task 3): the top is the style applied to the next
+    // Text/Code event. Starts with one default entry so `.last()` is always
+    // valid; Strong/Emphasis/Strikethrough/Link push a modified copy and pop
+    // it on their matching End.
+    let mut style_stack: Vec<Style> = vec![Style::default()];
     // Depth counter for an unhandled Start/End tag subtree currently being
     // skipped; >0 means every event is consumed until it unwinds to 0.
     let mut skip_depth: u32 = 0;
@@ -73,6 +79,21 @@ pub fn build_document(markdown: &str) -> Document {
             Event::Start(Tag::Heading { .. }) => {
                 current_spans.clear();
             }
+            Event::Start(Tag::Strong) => {
+                let mut style = *style_stack.last().unwrap();
+                style.bold = true;
+                style_stack.push(style);
+            }
+            Event::Start(Tag::Emphasis) => {
+                let mut style = *style_stack.last().unwrap();
+                style.italic = true;
+                style_stack.push(style);
+            }
+            Event::Start(Tag::Strikethrough) => {
+                let mut style = *style_stack.last().unwrap();
+                style.strikethrough = true;
+                style_stack.push(style);
+            }
             Event::End(TagEnd::Paragraph) => {
                 blocks.push(Block::Paragraph {
                     spans: std::mem::take(&mut current_spans),
@@ -80,7 +101,12 @@ pub fn build_document(markdown: &str) -> Document {
             }
             Event::End(TagEnd::Heading(level)) => {
                 let level = heading_level_to_u8(level);
-                let spans = std::mem::take(&mut current_spans);
+                let mut spans = std::mem::take(&mut current_spans);
+                if level == 1 {
+                    for span in &mut spans {
+                        span.text = span.text.to_uppercase();
+                    }
+                }
                 let text: String = spans.iter().map(|s| s.text.as_str()).collect();
                 headings.push(TocEntry {
                     level,
@@ -89,13 +115,24 @@ pub fn build_document(markdown: &str) -> Document {
                 });
                 blocks.push(Block::Heading { level, spans });
             }
+            Event::End(TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough) => {
+                style_stack.pop();
+            }
             Event::Rule => {
                 blocks.push(Block::Rule);
             }
             Event::Text(text) => {
                 current_spans.push(Span {
                     text: text.into_string(),
-                    style: Style::default(),
+                    style: *style_stack.last().unwrap(),
+                });
+            }
+            Event::Code(text) => {
+                let mut code_style = *style_stack.last().unwrap();
+                code_style.fg = Some(style::CODE);
+                current_spans.push(Span {
+                    text: text.into_string(),
+                    style: code_style,
                 });
             }
             Event::Start(_) => {
@@ -114,11 +151,13 @@ mod tests {
 
     #[test]
     fn heading_produces_heading_block_and_toc_entry() {
-        let doc = build_document("# Hello");
+        // Level-2+ headings aren't uppercased (that's H1-only, see the
+        // dedicated h1_uppercases_all_inline_content_including_code test).
+        let doc = build_document("## Hello");
         assert_eq!(
             doc.blocks,
             vec![Block::Heading {
-                level: 1,
+                level: 2,
                 spans: vec![Span {
                     text: "Hello".to_string(),
                     style: Style::default(),
@@ -128,7 +167,7 @@ mod tests {
         assert_eq!(
             doc.headings,
             vec![TocEntry {
-                level: 1,
+                level: 2,
                 text: "Hello".to_string(),
                 block_index: 0,
             }]
@@ -154,5 +193,129 @@ mod tests {
     fn rule_produces_rule_block() {
         let doc = build_document("---");
         assert_eq!(doc.blocks, vec![Block::Rule]);
+    }
+
+    fn only_paragraph_spans(markdown: &str) -> Vec<Span> {
+        let doc = build_document(markdown);
+        match doc.blocks.into_iter().next() {
+            Some(Block::Paragraph { spans }) => spans,
+            other => panic!("expected a single Paragraph block, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn strong_sets_bold() {
+        let spans = only_paragraph_spans("**bold**");
+        assert_eq!(
+            spans,
+            vec![Span {
+                text: "bold".to_string(),
+                style: Style {
+                    bold: true,
+                    ..Style::default()
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn emphasis_sets_italic() {
+        let spans = only_paragraph_spans("*italic*");
+        assert_eq!(
+            spans,
+            vec![Span {
+                text: "italic".to_string(),
+                style: Style {
+                    italic: true,
+                    ..Style::default()
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn strikethrough_sets_strikethrough() {
+        let spans = only_paragraph_spans("~~struck~~");
+        assert_eq!(
+            spans,
+            vec![Span {
+                text: "struck".to_string(),
+                style: Style {
+                    strikethrough: true,
+                    ..Style::default()
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn inline_code_gets_code_color() {
+        let spans = only_paragraph_spans("`code`");
+        assert_eq!(
+            spans,
+            vec![Span {
+                text: "code".to_string(),
+                style: Style {
+                    fg: Some(style::CODE),
+                    ..Style::default()
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn nested_bold_and_italic_combine() {
+        let spans = only_paragraph_spans("**bold *italic* text**");
+        assert_eq!(
+            spans,
+            vec![
+                Span {
+                    text: "bold ".to_string(),
+                    style: Style {
+                        bold: true,
+                        ..Style::default()
+                    },
+                },
+                Span {
+                    text: "italic".to_string(),
+                    style: Style {
+                        bold: true,
+                        italic: true,
+                        ..Style::default()
+                    },
+                },
+                Span {
+                    text: " text".to_string(),
+                    style: Style {
+                        bold: true,
+                        ..Style::default()
+                    },
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn h1_uppercases_all_inline_content_including_code() {
+        let doc = build_document("# hello `code`");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::Heading {
+                level: 1,
+                spans: vec![
+                    Span {
+                        text: "HELLO ".to_string(),
+                        style: Style::default(),
+                    },
+                    Span {
+                        text: "CODE".to_string(),
+                        style: Style {
+                            fg: Some(style::CODE),
+                            ..Style::default()
+                        },
+                    },
+                ],
+            }]
+        );
     }
 }
