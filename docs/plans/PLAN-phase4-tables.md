@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-6-phase4-tables`
 _Date:_ 2026-07-05
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #6
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -75,8 +75,8 @@ rules. Implementation-level gaps filled with these assumptions:
 
 ### Implementation
 
-- [ ] 0. Create branch `feature/issue-6-phase4-tables` from develop following docs/git-workflow.md
-- [ ] 1. `render.rs`: add `Block::Table { header: Vec<Vec<Span>>, rows: Vec<Vec<Vec<Span>>>, alignments: Vec<pulldown_cmark::Alignment> }` to the data model. Existing tests pass unchanged.
+- [x] 0. Create branch `feature/issue-6-phase4-tables` from develop following docs/git-workflow.md
+- [x] 1. `render.rs`: add `Block::Table { header: Vec<Vec<Span>>, rows: Vec<Vec<Vec<Span>>>, alignments: Vec<pulldown_cmark::Alignment> }` to the data model. Existing tests pass unchanged.
 - [ ] 2. `render.rs`: implement `Tag::Table`/`TableHead`/`TableRow`/`TableCell` parsing — each cell's inline content accumulates via the existing `ctx.current_spans` machinery (same as a tight list item), flushed into that cell's `Vec<Span>` at `End(TableCell)`. Unit tests: header + one body row, alignment vector round-trip (`None`/`Left`/`Center`/`Right`), a cell containing styled inline content (bold/link/code).
 - [ ] 3. `layout.rs`: natural column-width computation (max display-width per column across header + all rows, via `unicode_width`). Unit test: column widths match the widest cell in each column.
 - [ ] 4. `layout.rs`: shrink-widest-columns pass when the natural total (plus border/padding overhead) exceeds `content_width`, floored at 1 per column, never panicking (test at width 40 per Section 9's acceptance criterion, and at width 1).

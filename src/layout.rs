@@ -356,6 +356,8 @@ fn wrap_block(block: &Block, content_width: usize, list_level: u32) -> Vec<Line>
         Block::FootnoteDef { label, blocks } => {
             wrap_footnote_def(label, blocks, content_width, list_level)
         }
+        // Temporary: real rendering lands with Phase 4 plan task 5.
+        Block::Table { .. } => Vec::new(),
     }
 }
 

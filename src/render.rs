@@ -1,10 +1,9 @@
-use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::style;
 use crate::style::{Span, Style};
 
-/// Block-level structure before wrapping. `Table`/`Alignment` are added when
-/// Phase 4 lands (see plan Open questions).
+/// Block-level structure before wrapping.
 // `CodeBlock`/`BlockQuote` are the build plan's own Section 4 variant names
 // (not a style choice this crate is free to change).
 #[allow(clippy::enum_variant_names)]
@@ -35,6 +34,14 @@ pub enum Block {
     FootnoteDef {
         label: String,
         blocks: Vec<Block>,
+    },
+    Table {
+        header: Vec<Vec<Span>>,
+        rows: Vec<Vec<Vec<Span>>>,
+        // Reuses pulldown_cmark's own type (Phase 4 plan Open questions):
+        // it already carries exactly this shape and is what `Tag::Table`
+        // itself provides, so a redundant local enum would add nothing.
+        alignments: Vec<Alignment>,
     },
 }
 
@@ -199,6 +206,13 @@ fn force_dim(blocks: &mut [Block]) {
             Block::List { items, .. } => {
                 for item in items {
                     force_dim(&mut item.blocks);
+                }
+            }
+            Block::Table { header, rows, .. } => {
+                for cell in header.iter_mut().chain(rows.iter_mut().flatten()) {
+                    for span in cell {
+                        span.style.dim = true;
+                    }
                 }
             }
             Block::CodeBlock { .. } | Block::Html { .. } | Block::Rule => {}
