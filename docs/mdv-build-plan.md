@@ -104,6 +104,7 @@ struct Style {
     dim: bool,
     strikethrough: bool,
     reverse: bool,            // used for search-match highlight
+    underline: bool,          // used for link text (Section 5)
 }
 
 // A run of text with one style.
