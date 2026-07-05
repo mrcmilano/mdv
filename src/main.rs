@@ -35,10 +35,12 @@ Keybindings (Normal mode):
   Esc                         close overlay / cancel search input / clear search highlights
   q, Ctrl-C                   quit";
 
+#[derive(Debug)]
 struct RunConfig {
     contents: String,
 }
 
+#[derive(Debug)]
 enum Cli {
     Run(RunConfig),
     Help,
@@ -339,29 +341,25 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
 
         let bad_arg = OsString::from_vec(vec![0xff, 0xfe]);
-        let err = collect_args(vec![bad_arg]).err().expect("expected error");
+        let err = collect_args(vec![bad_arg]).expect_err("expected error");
         assert_eq!(err, "mdv: argument is not valid UTF-8");
     }
 
     #[test]
     fn no_arguments_is_an_error() {
-        let err = parse_args(args(&[])).err().expect("expected error");
+        let err = parse_args(args(&[])).expect_err("expected error");
         assert_eq!(err, "mdv: missing required argument <FILE>");
     }
 
     #[test]
     fn unknown_flag_is_an_error() {
-        let err = parse_args(args(&["--bogus"]))
-            .err()
-            .expect("expected error");
+        let err = parse_args(args(&["--bogus"])).expect_err("expected error");
         assert_eq!(err, "mdv: unknown option '--bogus'");
     }
 
     #[test]
     fn two_positional_arguments_is_an_error() {
-        let err = parse_args(args(&["a.md", "b.md"]))
-            .err()
-            .expect("expected error");
+        let err = parse_args(args(&["a.md", "b.md"])).expect_err("expected error");
         assert_eq!(err, "mdv: unexpected argument 'b.md'");
     }
 
@@ -397,9 +395,7 @@ mod tests {
     fn unreadable_file_is_an_error() {
         let path = env::temp_dir().join("mdv-test-does-not-exist.md");
         let _ = fs::remove_file(&path);
-        let err = parse_args(args(&[path.to_str().unwrap()]))
-            .err()
-            .expect("expected error");
+        let err = parse_args(args(&[path.to_str().unwrap()])).expect_err("expected error");
         assert_eq!(
             err,
             format!(
@@ -412,9 +408,7 @@ mod tests {
     #[test]
     fn non_utf8_file_is_an_error() {
         let file = TempFile::new(&[0xff, 0xfe, 0x00, 0xff]);
-        let err = parse_args(args(&[file.path.to_str().unwrap()]))
-            .err()
-            .expect("expected error");
+        let err = parse_args(args(&[file.path.to_str().unwrap()])).expect_err("expected error");
         assert_eq!(
             err,
             format!("mdv: '{}' is not valid UTF-8", file.path.display())
