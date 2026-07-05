@@ -439,4 +439,73 @@ mod tests {
             _ => panic!("expected Cli::Run"),
         }
     }
+
+    /// Re-serializes one `Span` back to a plain-text marker form, applying
+    /// markers outermost-to-innermost per the fixed scheme (plan task 8):
+    /// bold `**`, italic `*`, strikethrough `~~`, `style::CODE` foreground
+    /// `` ` ``. The corpus never combines inline code with bold/italic/
+    /// strikethrough on the same run, so these four never need to interleave
+    /// beyond simple nesting. Dim/underline/link-color/heading-color have no
+    /// natural plain-text marker and are intentionally left unmarked — they
+    /// are covered by the `render.rs`/`layout.rs` unit tests instead.
+    fn serialize_span(span: &style::Span) -> String {
+        let mut text = span.text.clone();
+        if span.style.fg == Some(style::CODE) {
+            text = format!("`{text}`");
+        }
+        if span.style.strikethrough {
+            text = format!("~~{text}~~");
+        }
+        if span.style.italic {
+            text = format!("*{text}*");
+        }
+        if span.style.bold {
+            text = format!("**{text}**");
+        }
+        text
+    }
+
+    fn serialize_lines(lines: &[layout::Line]) -> String {
+        lines
+            .iter()
+            .map(|line| line.spans.iter().map(serialize_span).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn corpus_snapshot_at_width_80() {
+        let corpus_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus.md");
+        let snapshot_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/snapshots/corpus.txt");
+
+        let markdown = fs::read_to_string(corpus_path).expect("read tests/corpus.md");
+        let document = render::build_document(&markdown);
+        let result = layout::wrap(&document, 80);
+        let rendered = serialize_lines(&result.lines);
+
+        if env::var("UPDATE_SNAPSHOTS").is_ok() {
+            fs::write(snapshot_path, &rendered).expect("write snapshot");
+            return;
+        }
+
+        let expected = fs::read_to_string(snapshot_path).expect("read tests/snapshots/corpus.txt");
+        assert_eq!(
+            rendered, expected,
+            "corpus snapshot mismatch; run with UPDATE_SNAPSHOTS=1 to regenerate"
+        );
+    }
+
+    /// Section 12's other robustness requirement (no panic at widths 1/2/40
+    /// on adversarial input) extended to also cover the real corpus, now
+    /// that it exists — `layout::tests::no_panic_on_adversarial_input_at_narrow_widths`
+    /// covers the seeded-LCG half.
+    #[test]
+    fn corpus_renders_without_panicking_at_narrow_widths() {
+        let corpus_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus.md");
+        let markdown = fs::read_to_string(corpus_path).expect("read tests/corpus.md");
+        let document = render::build_document(&markdown);
+        for width in [1, 2, 40] {
+            let _ = layout::wrap(&document, width);
+        }
+    }
 }
