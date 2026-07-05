@@ -1,6 +1,7 @@
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::render::{Block, Document};
+use crate::style;
 use crate::style::{Span, Style};
 
 /// One visual line after wrapping. Rendering = print spans left to right.
@@ -249,16 +250,82 @@ fn wrap_spans(spans: &[Span], content_width: usize) -> Vec<Line> {
     lines
 }
 
+/// Builds the spans a heading actually wraps: H1–H3 force bold and (unless a
+/// span already carries its own color, e.g. inline code or a link) the
+/// heading color; H4–H6 force bold only and gain a `"§ "` prefix. The
+/// uppercase transform for H1 already happened in `render.rs` — this only
+/// adds presentation, never touches text content (except the H4–H6 prefix).
+fn heading_presentation_spans(level: u8, spans: &[Span]) -> Vec<Span> {
+    let mut result = Vec::new();
+    if (4..=6).contains(&level) {
+        result.push(Span {
+            text: "§ ".to_string(),
+            style: Style {
+                bold: true,
+                ..Style::default()
+            },
+        });
+    }
+    for span in spans {
+        let mut style = span.style;
+        style.bold = true;
+        if level <= 3 && style.fg.is_none() {
+            style.fg = Some(style::HEADING);
+        }
+        result.push(Span {
+            text: span.text.clone(),
+            style,
+        });
+    }
+    result
+}
+
+/// H1/H2 underline width: the heading's pre-wrap display width (its spans'
+/// sanitized text concatenated), capped at `content_width` (Open questions
+/// assumption — "the width of the text" is ambiguous once the heading itself
+/// wraps at narrow widths).
+fn heading_underline_width(spans: &[Span], content_width: usize) -> usize {
+    let text: String = spans.iter().map(|s| sanitize(&s.text)).collect();
+    UnicodeWidthStr::width(text.as_str()).min(content_width)
+}
+
 /// Turns a `Document` into printable `Line`s at `terminal_width`.
 /// `content_width = terminal_width.min(100)`, clamped to a minimum of 1 so
 /// pathologically narrow terminals never cause a division/loop issue.
+/// Inserts exactly one blank `Line` between every adjacent pair of top-level
+/// blocks (decided, uniform — see plan Open questions); never a leading or
+/// trailing blank line.
 pub fn wrap(document: &Document, terminal_width: usize) -> LayoutResult {
     let content_width = terminal_width.clamp(1, 100);
-    let mut lines = Vec::new();
+    let mut lines: Vec<Line> = Vec::new();
+    let mut block_start_line: Vec<usize> = Vec::with_capacity(document.blocks.len());
 
-    for block in &document.blocks {
+    for (i, block) in document.blocks.iter().enumerate() {
+        if i > 0 {
+            lines.push(Line::default());
+        }
+        block_start_line.push(lines.len());
+
         match block {
-            Block::Heading { spans, .. } | Block::Paragraph { spans } => {
+            Block::Heading { level, spans } => {
+                let presented = heading_presentation_spans(*level, spans);
+                lines.extend(wrap_spans(&presented, content_width));
+                if *level == 1 || *level == 2 {
+                    let underline_width = heading_underline_width(spans, content_width);
+                    let ch = if *level == 1 { '═' } else { '─' };
+                    lines.push(Line {
+                        spans: vec![Span {
+                            text: ch.to_string().repeat(underline_width),
+                            style: Style {
+                                bold: true,
+                                fg: Some(style::HEADING),
+                                ..Style::default()
+                            },
+                        }],
+                    });
+                }
+            }
+            Block::Paragraph { spans } => {
                 lines.extend(wrap_spans(spans, content_width));
             }
             Block::Rule => {
@@ -275,9 +342,15 @@ pub fn wrap(document: &Document, terminal_width: usize) -> LayoutResult {
         }
     }
 
+    let heading_lines = document
+        .headings
+        .iter()
+        .map(|h| block_start_line[h.block_index])
+        .collect();
+
     LayoutResult {
         lines,
-        heading_lines: Vec::new(),
+        heading_lines,
     }
 }
 
@@ -417,5 +490,90 @@ mod tests {
             let doc = build_document(&adversarial);
             let _ = wrap(&doc, width);
         }
+    }
+
+    #[test]
+    fn h1_is_bold_heading_colored_uppercase_with_double_underline() {
+        let doc = build_document("# hi");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.lines.len(), 2);
+        assert_eq!(result.lines[0].spans[0].text, "HI");
+        assert_eq!(result.lines[0].spans[0].style.bold, true);
+        assert_eq!(result.lines[0].spans[0].style.fg, Some(style::HEADING));
+        assert_eq!(result.lines[1].spans[0].text, "══");
+    }
+
+    #[test]
+    fn h2_gets_single_line_underline() {
+        let doc = build_document("## hi");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.lines.len(), 2);
+        assert_eq!(result.lines[1].spans[0].text, "──");
+    }
+
+    #[test]
+    fn h3_is_bold_heading_colored_with_no_underline() {
+        let doc = build_document("### hi");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.lines.len(), 1);
+        assert_eq!(result.lines[0].spans[0].style.bold, true);
+        assert_eq!(result.lines[0].spans[0].style.fg, Some(style::HEADING));
+    }
+
+    #[test]
+    fn h4_to_h6_are_bold_with_section_prefix_and_no_color() {
+        for (markdown, expected_text) in [
+            ("#### hi", "§ hi"),
+            ("##### hi", "§ hi"),
+            ("###### hi", "§ hi"),
+        ] {
+            let doc = build_document(markdown);
+            let result = wrap(&doc, 80);
+            assert_eq!(result.lines.len(), 1);
+            let rendered: String = result.lines[0]
+                .spans
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect();
+            assert_eq!(rendered, expected_text);
+            // Inter-word space spans carry a neutral default style (task 5),
+            // so only the non-space text spans are asserted bold/uncolored.
+            for span in result.lines[0]
+                .spans
+                .iter()
+                .filter(|s| !s.text.trim().is_empty())
+            {
+                assert!(span.style.bold, "expected bold span, got {span:?}");
+                assert!(span.style.fg.is_none(), "expected no color, got {span:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn exactly_one_blank_line_between_every_pair_of_top_level_blocks() {
+        let doc = build_document("# H1\n\npara\n\n---\n\n## H2\n\npara2");
+        let result = wrap(&doc, 80);
+        let rendered = plain_spans(&result.lines);
+        // H1 line, H1 underline, blank, para, blank, rule, blank, H2, H2
+        // underline, blank, para2 — never two consecutive blanks.
+        for pair in rendered.windows(2) {
+            assert!(
+                !(pair[0].is_empty() && pair[1].is_empty()),
+                "two consecutive blank lines in {rendered:?}"
+            );
+        }
+        assert!(!rendered.first().unwrap().is_empty(), "leading blank line");
+        assert!(!rendered.last().unwrap().is_empty(), "trailing blank line");
+        assert!(rendered.contains(&"para".to_string()));
+        assert!(rendered.contains(&"para2".to_string()));
+    }
+
+    #[test]
+    fn heading_lines_maps_toc_entries_to_first_wrapped_line() {
+        let doc = build_document("# H1\n\npara\n\n## H2");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.heading_lines.len(), 2);
+        assert_eq!(result.lines[result.heading_lines[0]].spans[0].text, "H1");
+        assert_eq!(result.lines[result.heading_lines[1]].spans[0].text, "H2");
     }
 }
