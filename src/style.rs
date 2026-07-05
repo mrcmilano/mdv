@@ -6,6 +6,10 @@ pub const HEADING: Color = Color::Cyan;
 pub const CODE: Color = Color::Yellow;
 /// Link text foreground (build plan Section 5).
 pub const LINK: Color = Color::Blue;
+/// Blockquote gutter foreground (build plan Section 5: "Dim Green `┃ `").
+pub const QUOTE: Color = Color::Green;
+/// Checked task-list checkbox foreground (build plan Section 5).
+pub const TASK_CHECKED: Color = Color::Green;
 
 /// Terminal text style, restricted to crossterm's 16 ANSI colors (no RGB, per
 /// Section 5) so the user's terminal theme applies. `reverse` is reserved for

@@ -1,6 +1,6 @@
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::render::{Block, Document};
+use crate::render::{Block, Document, ListItem};
 use crate::style;
 use crate::style::{Span, Style};
 
@@ -21,23 +21,36 @@ pub struct LayoutResult {
 }
 
 /// Security-critical sanitization (build plan Section 5), applied to every
-/// span's text before wrapping: strips `\r`, replaces tabs with a single
-/// space (the "4 spaces inside code blocks" branch is dead until Phase 3),
-/// and replaces every other C0 control character, DEL, and C1 control with
-/// U+FFFD. Neutralizes escape-sequence injection — no other ANSI/OSC
-/// sequence in the source file survives to reach the terminal.
-fn sanitize(text: &str) -> String {
+/// span's text before wrapping: strips `\r`, replaces every tab with
+/// `tab_replacement` (four literal spaces inside code blocks, a single space
+/// everywhere else — no tab-stop math), and replaces every other C0 control
+/// character, DEL, and C1 control with U+FFFD. Neutralizes escape-sequence
+/// injection — no other ANSI/OSC sequence in the source file survives to
+/// reach the terminal.
+fn sanitize_with_tab(text: &str, tab_replacement: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
             '\r' => {}
             '\n' => out.push('\n'),
-            '\t' => out.push(' '),
+            '\t' => out.push_str(tab_replacement),
             c if is_replaceable_control(c) => out.push('\u{FFFD}'),
             c => out.push(c),
         }
     }
     out
+}
+
+/// `sanitize_with_tab` with the "elsewhere" tab rule (a single space) —
+/// every source-derived text outside a code block's own content uses this.
+fn sanitize(text: &str) -> String {
+    sanitize_with_tab(text, " ")
+}
+
+/// `sanitize_with_tab` with the "inside a code block" tab rule (four literal
+/// spaces) — used only for `CodeBlock` content lines (build plan Section 5).
+fn sanitize_code(text: &str) -> String {
+    sanitize_with_tab(text, "    ")
 }
 
 fn is_replaceable_control(c: char) -> bool {
@@ -289,6 +302,362 @@ fn heading_underline_width(spans: &[Span], content_width: usize) -> usize {
     UnicodeWidthStr::width(text.as_str()).min(content_width)
 }
 
+/// Renders one `Block` to `Line`s at `content_width`. `list_level` is the
+/// current *list*-nesting depth (0 at the document root), used only by the
+/// `List` arm to pick a bullet symbol and indent — it passes through
+/// unchanged into `BlockQuote`/`FootnoteDef` content (nesting inside a quote
+/// doesn't affect list bullet choice) and is incremented only when `List`
+/// recurses into its own items' content (see `wrap_list`).
+fn wrap_block(block: &Block, content_width: usize, list_level: u32) -> Vec<Line> {
+    match block {
+        Block::Heading { level, spans } => {
+            let mut lines = Vec::new();
+            let presented = heading_presentation_spans(*level, spans);
+            lines.extend(wrap_spans(&presented, content_width));
+            if *level == 1 || *level == 2 {
+                let underline_width = heading_underline_width(spans, content_width);
+                let ch = if *level == 1 { '═' } else { '─' };
+                lines.push(Line {
+                    spans: vec![Span {
+                        text: ch.to_string().repeat(underline_width),
+                        style: Style {
+                            bold: true,
+                            fg: Some(style::HEADING),
+                            ..Style::default()
+                        },
+                    }],
+                });
+            }
+            // A heading with no inline content (e.g. `###` alone) would
+            // otherwise contribute zero lines, leaving callers that map a
+            // `TocEntry` to this position pointing at the wrong line. Every
+            // heading must own at least one (possibly blank) line.
+            if lines.is_empty() {
+                lines.push(Line::default());
+            }
+            lines
+        }
+        Block::Paragraph { spans } => wrap_spans(spans, content_width),
+        Block::Rule => vec![Line {
+            spans: vec![Span {
+                text: "─".repeat(content_width),
+                style: Style {
+                    dim: true,
+                    ..Style::default()
+                },
+            }],
+        }],
+        Block::CodeBlock { language, lines } => {
+            wrap_code_block(language.as_deref(), lines, content_width)
+        }
+        Block::Html { lines } => wrap_html_block(lines, content_width),
+        Block::BlockQuote { blocks } => wrap_blockquote(blocks, content_width, list_level),
+        Block::List { ordered, items } => wrap_list(*ordered, items, content_width, list_level),
+        Block::FootnoteDef { label, blocks } => {
+            wrap_footnote_def(label, blocks, content_width, list_level)
+        }
+    }
+}
+
+/// Renders a sequence of sibling blocks (a blockquote's or footnote
+/// definition's content), inserting exactly one blank `Line` between every
+/// adjacent pair — the same rule `wrap()` applies at the document root.
+fn wrap_block_sequence(blocks: &[Block], content_width: usize, list_level: u32) -> Vec<Line> {
+    let mut lines = Vec::new();
+    for (i, block) in blocks.iter().enumerate() {
+        if i > 0 {
+            lines.push(Line::default());
+        }
+        lines.extend(wrap_block(block, content_width, list_level));
+    }
+    lines
+}
+
+/// Renders a list item's own blocks back-to-back with no blank-line
+/// separator: unlike a blockquote's or footnote definition's content, a
+/// nested sub-list (or a second paragraph in a "loose" item) flows directly
+/// under the item's own text — real-world terminal Markdown renderers don't
+/// insert a gap there, and doing so would produce an orphan
+/// indent-only continuation line.
+fn wrap_item_blocks(blocks: &[Block], content_width: usize, list_level: u32) -> Vec<Line> {
+    blocks
+        .iter()
+        .flat_map(|block| wrap_block(block, content_width, list_level))
+        .collect()
+}
+
+/// Code block rendering (build plan Section 5): every line — including the
+/// dim language line, if any — gets a 2-space-indent + dim `│ ` gutter;
+/// content is Yellow and never wrapped, only truncated with a trailing dim
+/// `…` when it overflows.
+fn wrap_code_block(
+    language: Option<&str>,
+    source_lines: &[String],
+    content_width: usize,
+) -> Vec<Line> {
+    const GUTTER: &str = "  │ ";
+    let gutter_style = Style {
+        dim: true,
+        ..Style::default()
+    };
+    let inner_width = content_width
+        .saturating_sub(UnicodeWidthStr::width(GUTTER))
+        .max(1);
+
+    let mut lines = Vec::new();
+    if let Some(lang) = language {
+        if !lang.is_empty() {
+            // The fence info string is source text like any other and must
+            // go through the same sanitization as content lines (Section
+            // 12: "no exception for code blocks or raw HTML").
+            let sanitized_lang = sanitize(lang);
+            lines.push(Line {
+                spans: vec![Span {
+                    text: format!("{GUTTER}({sanitized_lang})"),
+                    style: gutter_style,
+                }],
+            });
+        }
+    }
+    for raw in source_lines {
+        let sanitized = sanitize_code(raw);
+        let mut spans = vec![Span {
+            text: GUTTER.to_string(),
+            style: gutter_style,
+        }];
+        spans.extend(truncate_verbatim(
+            &sanitized,
+            inner_width,
+            Style {
+                fg: Some(style::CODE),
+                ..Style::default()
+            },
+            gutter_style,
+        ));
+        lines.push(Line { spans });
+    }
+    lines
+}
+
+/// Raw HTML block rendering: dim verbatim lines, truncated like `CodeBlock`
+/// but with no gutter/language line (Phase 3 plan Open questions).
+fn wrap_html_block(source_lines: &[String], content_width: usize) -> Vec<Line> {
+    let inner_width = content_width.max(1);
+    let dim_style = Style {
+        dim: true,
+        ..Style::default()
+    };
+    source_lines
+        .iter()
+        .map(|raw| {
+            let sanitized = sanitize(raw);
+            let spans = truncate_verbatim(&sanitized, inner_width, dim_style, dim_style);
+            Line { spans }
+        })
+        .collect()
+}
+
+/// Truncates `sanitized` to `inner_width`, appending an ellipsis span when it
+/// doesn't fit as-is (leaving room for the ellipsis itself: the content span
+/// then fits within `inner_width - 1`). `content_style` applies to the
+/// content span; `ellipsis_style` to the ellipsis (the two differ for code
+/// blocks, where content is Yellow but the ellipsis stays dim like the
+/// gutter).
+fn truncate_verbatim(
+    sanitized: &str,
+    inner_width: usize,
+    content_style: Style,
+    ellipsis_style: Style,
+) -> Vec<Span> {
+    let (_, rest) = split_at_width(sanitized, inner_width);
+    if rest.is_empty() {
+        return vec![Span {
+            text: sanitized.to_string(),
+            style: content_style,
+        }];
+    }
+    let (fit, _) = split_at_width(sanitized, inner_width.saturating_sub(1));
+    vec![
+        Span {
+            text: fit.to_string(),
+            style: content_style,
+        },
+        Span {
+            text: "…".to_string(),
+            style: ellipsis_style,
+        },
+    ]
+}
+
+/// Blockquote rendering: every line (including blank separator lines between
+/// child blocks) gets a dim-green `┃ ` prefix; nested quotes stack outermost
+/// first since each nesting level's own prefix is prepended onto the lines
+/// its (already-prefixed) children produced.
+fn wrap_blockquote(blocks: &[Block], content_width: usize, list_level: u32) -> Vec<Line> {
+    const PREFIX: &str = "┃ ";
+    let prefix_style = Style {
+        dim: true,
+        fg: Some(style::QUOTE),
+        ..Style::default()
+    };
+    let inner_width = content_width
+        .saturating_sub(UnicodeWidthStr::width(PREFIX))
+        .max(1);
+    wrap_block_sequence(blocks, inner_width, list_level)
+        .into_iter()
+        .map(|line| {
+            let mut spans = vec![Span {
+                text: PREFIX.to_string(),
+                style: prefix_style,
+            }];
+            spans.extend(line.spans);
+            Line { spans }
+        })
+        .collect()
+}
+
+/// Footnote definition rendering: `[^label]: ` prefixes the first line;
+/// continuation lines are padded to the same width so content aligns.
+fn wrap_footnote_def(
+    label: &str,
+    blocks: &[Block],
+    content_width: usize,
+    list_level: u32,
+) -> Vec<Line> {
+    // The footnote label is source text like any other and must go through
+    // the same sanitization as everything else (Section 12: "no exception").
+    let marker = format!("[^{}]: ", sanitize(label));
+    let marker_width = UnicodeWidthStr::width(marker.as_str());
+    let inner_width = content_width.saturating_sub(marker_width).max(1);
+    let mut inner_lines = wrap_block_sequence(blocks, inner_width, list_level);
+    if inner_lines.is_empty() {
+        inner_lines.push(Line::default());
+    }
+    let pad = " ".repeat(marker_width);
+    inner_lines
+        .into_iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let prefix = if i == 0 { marker.clone() } else { pad.clone() };
+            let mut spans = vec![Span {
+                text: prefix,
+                style: Style::default(),
+            }];
+            spans.extend(line.spans);
+            Line { spans }
+        })
+        .collect()
+}
+
+/// List rendering: bullet by nesting level (`•`/`◦`/`▪`) or ordinal (`N.`,
+/// from the list's own start number) or a colored checkbox for task items,
+/// as the first line's marker; continuation lines (further wraps of the
+/// item's own content, and any subsequent blocks in a multi-block item —
+/// including a nested `List`'s own lines) are padded to the same width so
+/// they align under the text, not the marker (build plan Section 5).
+///
+/// `list_level` only selects the bullet symbol here — it contributes no
+/// indent string of its own. A nested `List`'s lines already flow back
+/// through *this* function's own `li > 0` padding (since the nested `List`
+/// is just another block in the outer item's content), so indentation
+/// compounds naturally across nesting levels through recursion alone; a
+/// separate `"  ".repeat(list_level)` prefix would double it.
+fn wrap_list(
+    ordered: Option<u64>,
+    items: &[ListItem],
+    content_width: usize,
+    list_level: u32,
+) -> Vec<Line> {
+    let bullet_symbol = match list_level {
+        0 => "•",
+        1 => "◦",
+        _ => "▪",
+    };
+
+    let mut lines = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let checkbox: Option<(&str, Style)> = match item.checked {
+            Some(true) => Some((
+                "[✓]",
+                Style {
+                    fg: Some(style::TASK_CHECKED),
+                    ..Style::default()
+                },
+            )),
+            Some(false) => Some(("[ ]", Style::default())),
+            None => None,
+        };
+        // saturating: an adversarial start number near u64::MAX combined
+        // with many items must never panic (Section 12).
+        let ordinal = ordered.map(|start| format!("{}.", start.saturating_add(i as u64)));
+
+        let mut marker_spans: Vec<Span> = Vec::new();
+        match (ordinal, checkbox) {
+            // An ordered task-list item (e.g. "1. [ ] item" — pulldown-cmark
+            // parses task markers inside ordered lists too); keep both
+            // rather than silently dropping the ordinal.
+            (Some(ordinal), Some((box_text, box_style))) => {
+                marker_spans.push(Span {
+                    text: format!("{ordinal} "),
+                    style: Style::default(),
+                });
+                marker_spans.push(Span {
+                    text: box_text.to_string(),
+                    style: box_style,
+                });
+            }
+            (None, Some((box_text, box_style))) => {
+                marker_spans.push(Span {
+                    text: box_text.to_string(),
+                    style: box_style,
+                });
+            }
+            (Some(ordinal), None) => {
+                marker_spans.push(Span {
+                    text: ordinal,
+                    style: Style::default(),
+                });
+            }
+            (None, None) => {
+                marker_spans.push(Span {
+                    text: bullet_symbol.to_string(),
+                    style: Style::default(),
+                });
+            }
+        }
+        let marker_width: usize = marker_spans
+            .iter()
+            .map(|s| UnicodeWidthStr::width(s.text.as_str()))
+            .sum();
+        let first_prefix_width = marker_width + 1;
+        let item_content_width = content_width.saturating_sub(first_prefix_width).max(1);
+
+        let mut item_lines = wrap_item_blocks(&item.blocks, item_content_width, list_level + 1);
+        if item_lines.is_empty() {
+            item_lines.push(Line::default());
+        }
+
+        for (li, line) in item_lines.into_iter().enumerate() {
+            let mut spans = Vec::new();
+            if li == 0 {
+                spans.extend(marker_spans.iter().cloned());
+                spans.push(Span {
+                    text: " ".to_string(),
+                    style: Style::default(),
+                });
+            } else {
+                spans.push(Span {
+                    text: " ".repeat(marker_width + 1),
+                    style: Style::default(),
+                });
+            }
+            spans.extend(line.spans);
+            lines.push(Line { spans });
+        }
+    }
+    lines
+}
+
 /// Turns a `Document` into printable `Line`s at `terminal_width`.
 /// `content_width = terminal_width.min(100)`, clamped to a minimum of 1 so
 /// pathologically narrow terminals never cause a division/loop issue.
@@ -305,51 +674,7 @@ pub fn wrap(document: &Document, terminal_width: usize) -> LayoutResult {
             lines.push(Line::default());
         }
         block_start_line.push(lines.len());
-
-        match block {
-            Block::Heading { level, spans } => {
-                let block_start = lines.len();
-                let presented = heading_presentation_spans(*level, spans);
-                lines.extend(wrap_spans(&presented, content_width));
-                if *level == 1 || *level == 2 {
-                    let underline_width = heading_underline_width(spans, content_width);
-                    let ch = if *level == 1 { '═' } else { '─' };
-                    lines.push(Line {
-                        spans: vec![Span {
-                            text: ch.to_string().repeat(underline_width),
-                            style: Style {
-                                bold: true,
-                                fg: Some(style::HEADING),
-                                ..Style::default()
-                            },
-                        }],
-                    });
-                }
-                // A heading with no inline content (e.g. `###` alone) would
-                // otherwise contribute zero lines, leaving this heading's
-                // `block_start_line` entry pointing past its own block —
-                // out of bounds if it's the last block, or at the next
-                // block's line otherwise. Every heading must own at least
-                // one (possibly blank) line.
-                if lines.len() == block_start {
-                    lines.push(Line::default());
-                }
-            }
-            Block::Paragraph { spans } => {
-                lines.extend(wrap_spans(spans, content_width));
-            }
-            Block::Rule => {
-                lines.push(Line {
-                    spans: vec![Span {
-                        text: "─".repeat(content_width),
-                        style: Style {
-                            dim: true,
-                            ..Style::default()
-                        },
-                    }],
-                });
-            }
-        }
+        lines.extend(wrap_block(block, content_width, 0));
     }
 
     let heading_lines = document
@@ -384,6 +709,20 @@ mod tests {
     #[test]
     fn sanitize_replaces_tabs_with_a_single_space() {
         assert_eq!(sanitize("a\tb"), "a b");
+    }
+
+    #[test]
+    fn sanitize_code_replaces_tabs_with_four_spaces() {
+        // Build plan Section 5: tabs expand to 4 literal spaces inside code
+        // blocks specifically, vs. 1 space everywhere else.
+        assert_eq!(sanitize_code("a\tb"), "a    b");
+    }
+
+    #[test]
+    fn code_block_content_expands_tabs_to_four_spaces() {
+        let doc = build_document("```\na\tb\n```");
+        let result = wrap(&doc, 80);
+        assert_eq!(plain_spans(&result.lines), vec!["  │ a    b"]);
     }
 
     #[test]
@@ -603,5 +942,185 @@ mod tests {
             result.lines.len()
         );
         assert!(result.lines[index].spans.is_empty());
+    }
+
+    #[test]
+    fn code_block_never_wraps_and_truncates_with_dim_ellipsis_at_narrow_width() {
+        let doc = build_document("```\nthis line is much too long to fit\n```");
+        let result = wrap(&doc, 12);
+        // Gutter "  │ " is 4 columns wide, leaving 8 for content; truncation
+        // reserves 1 of those for the ellipsis.
+        assert_eq!(result.lines.len(), 1);
+        let spans = &result.lines[0].spans;
+        assert_eq!(spans[0].text, "  │ ");
+        assert_eq!(spans[1].text, "this li");
+        assert_eq!(spans[1].style.fg, Some(style::CODE));
+        assert_eq!(spans[2].text, "…");
+        assert!(spans[2].style.dim);
+    }
+
+    #[test]
+    fn code_block_with_language_gets_a_dim_language_line() {
+        let doc = build_document("```rust\nfn f() {}\n```");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.lines.len(), 2);
+        assert_eq!(result.lines[0].spans[0].text, "  │ (rust)");
+        assert!(result.lines[0].spans[0].style.dim);
+        assert_eq!(result.lines[1].spans[1].text, "fn f() {}");
+    }
+
+    #[test]
+    fn code_block_without_language_has_no_language_line() {
+        let doc = build_document("```\ncode\n```");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.lines.len(), 1);
+        assert_eq!(result.lines[0].spans[1].text, "code");
+    }
+
+    #[test]
+    fn code_block_sanitizes_esc_bytes() {
+        let malicious = "```\nbefore\u{001b}]52;c;X\u{0007}after\n```";
+        let doc = build_document(malicious);
+        let result = wrap(&doc, 80);
+        for line in &result.lines {
+            for span in &line.spans {
+                assert!(!span.text.as_bytes().contains(&0x1b));
+            }
+        }
+    }
+
+    #[test]
+    fn code_block_sanitizes_esc_bytes_in_the_fence_language_string() {
+        // Adversarial-review finding: the fence info string (the language
+        // name) was embedded into the gutter's `(lang)` line without going
+        // through `sanitize()`, unlike every other source-derived line in
+        // this codebase — an ESC byte in the fence line (e.g.
+        // ```rust<ESC>]52;...) reached the terminal unfiltered.
+        let malicious = "```rust\u{001b}]52;c;X\u{0007}\ncode\n```";
+        let doc = build_document(malicious);
+        let result = wrap(&doc, 80);
+        for line in &result.lines {
+            for span in &line.spans {
+                assert!(!span.text.as_bytes().contains(&0x1b));
+            }
+        }
+    }
+
+    #[test]
+    fn footnote_def_sanitizes_esc_bytes_in_the_label() {
+        // Adversarial-review finding: same class of bug as the fence
+        // language string above — the footnote label was embedded into the
+        // `[^label]: ` marker without going through `sanitize()`.
+        let malicious = "text[^foo\u{001b}bar]\n\n[^foo\u{001b}bar]: body";
+        let doc = build_document(malicious);
+        let result = wrap(&doc, 80);
+        for line in &result.lines {
+            for span in &line.spans {
+                assert!(!span.text.as_bytes().contains(&0x1b));
+            }
+        }
+    }
+
+    #[test]
+    fn nested_blockquote_containing_code_block_matches_spec_prefix_composition() {
+        // Build plan Section 5's literal example: a code block inside a
+        // blockquote renders as `┃   │ code`.
+        let doc = build_document("> ```\n> code\n> ```");
+        let result = wrap(&doc, 80);
+        assert_eq!(plain_spans(&result.lines), vec!["┃   │ code"]);
+    }
+
+    #[test]
+    fn three_level_nested_list_continuation_lines_align_under_text() {
+        let doc = build_document("- an item with enough text to wrap across two lines here");
+        let result = wrap(&doc, 20);
+        let rendered = plain_spans(&result.lines);
+        assert_eq!(rendered[0].as_str(), "• an item with");
+        // Continuation lines pad to the same width as "• " (2 columns).
+        assert!(rendered[1].starts_with("  "), "got {:?}", rendered[1]);
+        assert!(!rendered[1].starts_with("  •"), "got {:?}", rendered[1]);
+    }
+
+    #[test]
+    fn nested_list_bullets_change_by_level() {
+        let doc = build_document("- a\n  - b\n    - c");
+        let result = wrap(&doc, 80);
+        let rendered = plain_spans(&result.lines);
+        assert_eq!(rendered, vec!["• a", "  ◦ b", "    ▪ c"]);
+    }
+
+    #[test]
+    fn ordered_list_two_digit_marker_aligns_continuation() {
+        let doc =
+            build_document("9. nine\n10. ten item with enough text to wrap onto a second line");
+        let result = wrap(&doc, 20);
+        let rendered = plain_spans(&result.lines);
+        assert_eq!(rendered[0], "9. nine");
+        // "10. " is 4 columns; continuation must pad to the same width.
+        let ten_first = rendered.iter().find(|l| l.starts_with("10.")).unwrap();
+        assert_eq!(ten_first, "10. ten item with");
+        let ten_cont_index = rendered.iter().position(|l| l == ten_first).unwrap() + 1;
+        assert!(rendered[ten_cont_index].starts_with("    "));
+    }
+
+    #[test]
+    fn task_list_checkbox_colors() {
+        let doc = build_document("- [ ] todo\n- [x] done");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.lines[0].spans[0].text, "[ ]");
+        assert_eq!(result.lines[0].spans[0].style.fg, None);
+        assert_eq!(result.lines[1].spans[0].text, "[✓]");
+        assert_eq!(result.lines[1].spans[0].style.fg, Some(style::TASK_CHECKED));
+    }
+
+    #[test]
+    fn ordered_task_list_keeps_the_ordinal_alongside_the_checkbox() {
+        // pre-merge-code-review finding: pulldown-cmark allows task markers
+        // inside ordered lists ("1. [ ] item"); dropping the ordinal (as an
+        // earlier version did, treating checked-state as fully replacing
+        // the marker) silently lost information.
+        let doc = build_document("1. [ ] todo\n2. [x] done");
+        let result = wrap(&doc, 80);
+        assert_eq!(
+            plain_spans(&result.lines),
+            vec!["1. [ ] todo", "2. [✓] done"]
+        );
+        assert_eq!(result.lines[1].spans[1].style.fg, Some(style::TASK_CHECKED));
+    }
+
+    #[test]
+    fn html_block_is_dim_and_truncates_on_overflow() {
+        let doc = build_document("<div>\nthis line is much too long to fit\n</div>");
+        let result = wrap(&doc, 10);
+        assert_eq!(
+            plain_spans(&result.lines),
+            vec!["<div>", "this line…", "</div>"]
+        );
+        for span in &result.lines[1].spans {
+            assert!(span.style.dim);
+        }
+    }
+
+    #[test]
+    fn footnote_def_renders_after_a_rule_at_document_end() {
+        let doc = build_document("text[^1]\n\n[^1]: note body");
+        let result = wrap(&doc, 80);
+        let rendered = plain_spans(&result.lines);
+        let rule_index = rendered.iter().position(|l| l.starts_with('─')).unwrap();
+        assert_eq!(rendered[rule_index + 2], "[^1]: note body");
+    }
+
+    #[test]
+    fn footnote_def_multiline_content_aligns_under_marker() {
+        let long = "a very long footnote body that will certainly wrap onto more than one line";
+        let doc = build_document(&format!("text[^1]\n\n[^1]: {long}"));
+        let result = wrap(&doc, 30);
+        let rendered = plain_spans(&result.lines);
+        let marker_index = rendered
+            .iter()
+            .position(|l| l.starts_with("[^1]: "))
+            .unwrap();
+        let marker_width = "[^1]: ".len();
+        assert!(rendered[marker_index + 1].starts_with(&" ".repeat(marker_width)));
     }
 }
