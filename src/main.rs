@@ -56,6 +56,23 @@ fn clean_io_message(e: &io::Error) -> String {
     }
 }
 
+/// Converts raw argv (`OsString`, which on Unix is arbitrary bytes and is
+/// *not* guaranteed to be valid UTF-8) into `String`s before `parse_args` ever
+/// sees them. `env::args()` panics on a non-UTF-8 argument; a hostile or
+/// merely mis-encoded filename must not crash the process, so this collects
+/// via `args_os()` and turns a conversion failure into the same one-line
+/// stderr contract every other invalid-argument case uses (Section 3).
+fn collect_args<I: IntoIterator<Item = std::ffi::OsString>>(
+    args: I,
+) -> Result<Vec<String>, String> {
+    args.into_iter()
+        .map(|arg| {
+            arg.into_string()
+                .map_err(|_| "mdv: argument is not valid UTF-8".to_string())
+        })
+        .collect()
+}
+
 fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     let mut path: Option<String> = None;
     for arg in args {
@@ -255,7 +272,13 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
 }
 
 fn main() -> ExitCode {
-    let args = env::args().skip(1);
+    let args = match collect_args(env::args_os().skip(1)) {
+        Ok(args) => args,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
+        }
+    };
     match parse_args(args) {
         Ok(Cli::Help) => {
             println!("{USAGE}\n\n{KEYBINDINGS}");
@@ -307,6 +330,17 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.path);
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn non_utf8_argument_is_an_error_not_a_panic() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let bad_arg = OsString::from_vec(vec![0xff, 0xfe]);
+        let err = collect_args(vec![bad_arg]).err().expect("expected error");
+        assert_eq!(err, "mdv: argument is not valid UTF-8");
     }
 
     #[test]

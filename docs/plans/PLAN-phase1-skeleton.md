@@ -87,6 +87,16 @@ included in Finish.
 
 ### Implementation
 - [x] 0. Create branch `feature/issue-1-phase1-skeleton` from develop following docs/git-workflow.md
+- [x] 9. Second adversarial-review pass (post-`READY`) found a FIX REQUIRED:
+      `env::args()` panics on a non-UTF-8 argv byte (Unix filenames are
+      arbitrary bytes), crashing with a raw Rust panic instead of the
+      Section 3 one-line stderr contract every other invalid-argument case
+      uses. Reproduced (`exit 101`, panic at `env.rs`), then fixed by
+      switching to `env::args_os()` + a new `collect_args` helper that
+      turns a non-UTF-8 argument into `mdv: argument is not valid UTF-8`
+      (exit 1), matching the existing error style. Re-verified: same input
+      now exits 1 cleanly. Added `non_utf8_argument_is_an_error_not_a_panic`
+      unit test (`#[cfg(unix)]`, since `OsStringExt` is Unix-only).
 - [x] 1. Crate scaffolding: `Cargo.toml` with the 3 dependencies and release profile from Section 2, minimal `src/main.rs` with `#![forbid(unsafe_code)]` and an empty `fn main()`. `cargo build` and `cargo clippy -- -D warnings` clean.
 - [x] 2. CLI parsing & validation: positional `<FILE>`, `--help`/`-h`, `--version`/`-V`; error cases (no arg, unknown flag, unreadable file, non-UTF-8 file) print the one-line stderr message from Section 3 and exit 1; `--help` prints usage + the Section 7 keybinding table to stdout and exits 0; `--version` prints `mdv <version>` via `CARGO_PKG_VERSION` and exits 0. Parsing logic in a testable function with unit tests for each case.
 - [x] 3. `src/input.rs`: `KeyEvent -> Action` mapping for the Phase 1 scroll row decided in Open questions (line up/down, half-page up/down, top, bottom, quit). Unit tests covering every bound key and confirming unbound keys map to no-op.
@@ -99,7 +109,7 @@ included in Finish.
 
 ### Finish
 - [x] Write / update tests for all implementation tasks above
-- [x] Run full test suite — all tests pass (35 tests, `cargo test`)
+- [x] Run full test suite — all tests pass (36 tests, `cargo test`)
 - [x] Run `cargo audit` (first successful build) — no advisories
 - [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
@@ -108,6 +118,8 @@ included in Finish.
       failure; full-viewport scroll bug in `draw()` — both verified fixed via
       a pty + `pyte` terminal-emulation harness). 1 LOW finding deferred, see
       below. Second pass: PASS.
+      Third pass (task 9 above): 1 more FIX REQUIRED resolved (non-UTF-8 argv
+      panic) plus 1 more LOW finding deferred (see below). Fourth pass: PASS.
 - [ ] Update `README.md` if affected — N/A, no `README.md` exists yet in this repo.
 - [x] Convert draft PR to ready-for-review; add `Closes #1` to PR description;
       set this plan's `_Status:_` to `READY`
@@ -125,3 +137,14 @@ included in Finish.
   doesn't mention `--` handling or dash-prefixed filenames anywhere, and this
   is a narrow edge case unlikely to matter in practice. Deferring rather than
   adding unspecified CLI behavior.
+- **LOW — `read()` failure in the event loop is indistinguishable from a
+  clean quit** (`src/main.rs`, `run()`'s `while let Ok(event) = read()` loop):
+  if `crossterm::event::read()` ever returns `Err` (e.g. the controlling
+  terminal is lost after the initial stdout-is-a-TTY check passes), the loop
+  just ends and the process exits `SUCCESS` with no error message, silently
+  treating a real failure as a normal `q` quit. Narrow (requires losing the
+  tty mid-session, not just piping stdout, which is already rejected up
+  front) and low-impact (the terminal is gone either way, so there's no
+  meaningful error to show the user). Deferring rather than adding
+  unspecified error-reporting behavior for an edge case the build plan
+  doesn't address.
