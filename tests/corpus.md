@@ -75,3 +75,10 @@ Inline HTML like <span>this</span> stays dim inline.
 A sentence with a footnote reference[^note].
 
 [^note]: The footnote's body text.
+
+## Tables
+
+| Left aligned column | Centered column | Right aligned column with a long header |
+|:--|:-:|--:|
+| short | a longer cell value that will need to wrap | 1 |
+| **bold** and `code` | y | 2 |

@@ -81,7 +81,7 @@ rules. Implementation-level gaps filled with these assumptions:
 - [x] 3. `layout.rs`: natural column-width computation (max display-width per column across header + all rows, via `unicode_width`). Unit test: column widths match the widest cell in each column.
 - [x] 4. `layout.rs`: shrink-widest-columns pass when the natural total (plus border/padding overhead) exceeds `content_width`, floored at 1 per column, never panicking (test at width 40 per Section 9's acceptance criterion, and at width 1).
 - [x] 5. `layout.rs`: box-drawing rendering — top border, bold header row, one separator row, un-separated body rows, bottom border; alignment-aware padding; in-cell wrapping via `wrap_spans` at each column's final width, with row height growing to the tallest wrapped cell and shorter cells space-padded. Unit tests: alignment markers respected (`:---:` etc.), a table wider than the terminal shrinks/wraps without panicking at width 40, header row is bold, a cell's wrapped content stays inside its column's box.
-- [ ] 6. Extend `tests/corpus.md` with a table wide enough to require shrinking and all three alignment markers (Section 10); regenerate `tests/snapshots/corpus.txt` via `UPDATE_SNAPSHOTS=1`.
+- [x] 6. Extend `tests/corpus.md` with a table wide enough to require shrinking and all three alignment markers (Section 10); regenerate `tests/snapshots/corpus.txt` via `UPDATE_SNAPSHOTS=1`.
 
 ### Finish
 
