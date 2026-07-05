@@ -139,3 +139,21 @@ if implementation reveals a problem):
 
 ## Deferred findings
 <!-- populated after adversarial-review, if any LOW findings are deferred -->
+
+- **LOW — multi-codepoint grapheme clusters can split across a line-wrap
+  boundary.** `layout::split_at_width` (and `place_piece`'s force-through
+  path) operate on `char` boundaries using `unicode_width`'s per-codepoint
+  widths, not extended grapheme clusters. A sequence made of multiple
+  codepoints that render as one glyph (e.g. an emoji + skin-tone modifier, or
+  a flag built from two regional-indicator codepoints) could theoretically be
+  split between codepoints if a wrap boundary lands between them, rendering
+  as two separate glyphs instead of one. This never panics (the split is
+  always on a valid UTF-8/char boundary) — it's a rendering-fidelity gap, not
+  a crash or security issue. Fixing it properly needs grapheme-cluster
+  segmentation (e.g. the `unicode-segmentation` crate), which would add a 4th
+  dependency beyond the 3 named in the build plan (Section 2's hard
+  constraint) — out of scope for Phase 2. The build plan's own CJK/emoji
+  requirement (Section 5/12) is stated in terms of `unicode_width` column
+  math on simple single-codepoint characters, which the corpus and unit
+  tests already cover; combining characters aren't in the corpus. Revisit
+  only if a real document surfaces visibly broken glyphs.

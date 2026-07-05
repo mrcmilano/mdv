@@ -308,6 +308,7 @@ pub fn wrap(document: &Document, terminal_width: usize) -> LayoutResult {
 
         match block {
             Block::Heading { level, spans } => {
+                let block_start = lines.len();
                 let presented = heading_presentation_spans(*level, spans);
                 lines.extend(wrap_spans(&presented, content_width));
                 if *level == 1 || *level == 2 {
@@ -323,6 +324,15 @@ pub fn wrap(document: &Document, terminal_width: usize) -> LayoutResult {
                             },
                         }],
                     });
+                }
+                // A heading with no inline content (e.g. `###` alone) would
+                // otherwise contribute zero lines, leaving this heading's
+                // `block_start_line` entry pointing past its own block —
+                // out of bounds if it's the last block, or at the next
+                // block's line otherwise. Every heading must own at least
+                // one (possibly blank) line.
+                if lines.len() == block_start {
+                    lines.push(Line::default());
                 }
             }
             Block::Paragraph { spans } => {
@@ -575,5 +585,23 @@ mod tests {
         assert_eq!(result.heading_lines.len(), 2);
         assert_eq!(result.lines[result.heading_lines[0]].spans[0].text, "H1");
         assert_eq!(result.lines[result.heading_lines[1]].spans[0].text, "H2");
+    }
+
+    #[test]
+    fn empty_trailing_heading_gets_a_valid_in_bounds_heading_line() {
+        // A heading with no inline content (e.g. `###` alone) would
+        // otherwise contribute zero lines; as the last block in the
+        // document that left heading_lines pointing one past the end of
+        // `lines`, an out-of-bounds index (adversarial-review finding).
+        let doc = build_document("text\n\n###");
+        let result = wrap(&doc, 80);
+        assert_eq!(result.heading_lines.len(), 1);
+        let index = result.heading_lines[0];
+        assert!(
+            index < result.lines.len(),
+            "heading_lines[0] = {index} is out of bounds for {} lines",
+            result.lines.len()
+        );
+        assert!(result.lines[index].spans.is_empty());
     }
 }
