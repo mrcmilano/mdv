@@ -267,7 +267,7 @@ writing this plan.
       truncate overflowing heading text with a trailing `…`, and use
       `toc_scroll`/`toc_cursor` from task 4 to render the correct
       window of headings when there are more than fit.
-- [ ] 9. `main.rs`: SearchInput rendering — replace the status bar row
+- [x] 9. `main.rs`: SearchInput rendering — replace the status bar row
       entirely with `/query▌`, truncating the query display (not the
       underlying `String`) from the left if it doesn't fit `terminal_width`
       so the cursor marker `▌` stays visible.

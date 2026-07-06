@@ -238,6 +238,28 @@ fn status_bar_line(view: &view::ViewState, filename: &str, width: usize) -> Stri
     format!("{filename}{}{right}", " ".repeat(gutter_width))
 }
 
+/// Builds the `Mode::SearchInput` input line: `/query▌`, left-truncating
+/// the *displayed* query (not the stored buffer) when `/` + query + the
+/// cursor marker don't fit `width`, so the cursor marker stays visible —
+/// truncating from the left keeps the end of the query (nearest the
+/// cursor) rather than its start.
+fn search_input_line(query: &str, width: usize) -> String {
+    const CURSOR: &str = "▌";
+    let prefix_width = 1; // "/"
+    let cursor_width = UnicodeWidthStr::width(CURSOR);
+    let budget = width.saturating_sub(prefix_width + cursor_width);
+
+    let mut chars: Vec<char> = query.chars().collect();
+    let mut query_width = UnicodeWidthStr::width(query);
+    while query_width > budget && !chars.is_empty() {
+        let removed = chars.remove(0);
+        query_width -= UnicodeWidthChar::width(removed).unwrap_or(0);
+    }
+    let display_query: String = chars.into_iter().collect();
+
+    format!("/{display_query}{CURSOR}")
+}
+
 /// Truncates `text` to at most `max_width` display columns, appending a
 /// trailing `…` (reserving 1 column for it) when it doesn't fit as-is.
 /// Mirrors `layout::truncate_verbatim`'s reserve-a-column approach, but for
@@ -410,11 +432,16 @@ fn draw(view: &view::ViewState, filename: &str, width: u16, height: u16) -> io::
     }
 
     let status_row = height.saturating_sub(1);
-    let line = status_bar_line(view, filename, width as usize);
     queue!(stdout, MoveTo(0, status_row))?;
-    queue!(stdout, SetAttribute(Attribute::Reverse))?;
-    queue!(stdout, Print(&line))?;
-    queue!(stdout, SetAttribute(Attribute::Reset))?;
+    if view.mode() == view::Mode::SearchInput {
+        let line = search_input_line(view.search_input(), width as usize);
+        queue!(stdout, Print(&line))?;
+    } else {
+        let line = status_bar_line(view, filename, width as usize);
+        queue!(stdout, SetAttribute(Attribute::Reverse))?;
+        queue!(stdout, Print(&line))?;
+        queue!(stdout, SetAttribute(Attribute::Reset))?;
+    }
 
     stdout.flush()
 }
@@ -937,6 +964,25 @@ mod tests {
         let view = view_with(20, 10);
         for (w, h) in [(0, 0), (1, 1), (3, 3), (5, 5), (80, 24)] {
             let _ = draw_toc_overlay(&headings, &view, w, h);
+        }
+    }
+
+    #[test]
+    fn search_input_line_shows_the_query_and_cursor_when_it_fits() {
+        assert_eq!(search_input_line("hello", 20), "/hello▌");
+    }
+
+    #[test]
+    fn search_input_line_truncates_the_query_from_the_left_to_keep_the_cursor_visible() {
+        // width 5 => budget for the query is 5 - 1 ("/") - 1 (cursor) = 3,
+        // so only the last 3 chars of the query survive.
+        assert_eq!(search_input_line("hello world", 5), "/rld▌");
+    }
+
+    #[test]
+    fn search_input_line_never_panics_at_degenerate_widths() {
+        for width in [0, 1, 2] {
+            let _ = search_input_line("hello", width);
         }
     }
 }
