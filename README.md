@@ -5,13 +5,15 @@ A lean, read-only, interactive terminal Markdown viewer, written in Rust.
 `mdv` opens a Markdown file and lets you scroll through it in your terminal —
 no editor, no browser. It never writes to the file it opens.
 
-> **Status:** Phases 1–4 are implemented — CLI parsing, terminal lifecycle,
+> **Status:** Phases 1–5 are implemented — CLI parsing, terminal lifecycle,
 > rendering of headings, paragraphs, emphasis/strong/strikethrough, inline
 > code, links, images, horizontal rules, hard/soft breaks, code blocks,
 > blockquotes (nested), ordered/unordered/task lists (nested), raw HTML
 > passthrough, footnotes, and box-drawing tables (alignment, in-cell
-> wrapping), with resize-triggered re-layout. Search and TOC land in a later
-> phase; see `docs/mdv-build-plan.md` for the full spec and phase breakdown.
+> wrapping), with resize-triggered re-layout, plus incremental search with
+> match highlighting, a TOC overlay, and the status bar. Phase 6 (optional
+> syntax highlighting) is out of scope for v1; see `docs/mdv-build-plan.md`
+> for the full spec and phase breakdown.
 
 ## Build
 
@@ -37,7 +39,14 @@ mdv --version | -V
 | `u`, `PageUp` | scroll up half a screen |
 | `g`, `Home` | go to top |
 | `G`, `End` | go to bottom |
+| `t` | toggle TOC overlay |
+| `/` | start search input |
+| `n` / `N` | next / previous search match |
+| `Esc` | close overlay / cancel search input / clear search highlights |
 | `q`, `Ctrl-C` | quit |
+
+`SearchInput` and `Toc` modes override these keys — see
+`docs/mdv-build-plan.md` Section 6 for the full interaction model.
 
 ## Development
 
