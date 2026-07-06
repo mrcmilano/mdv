@@ -235,7 +235,7 @@ writing this plan.
       quit while Toc is open). Update existing tests for the new
       signature; add tests for each mode's overrides (e.g. `t` is literal
       in SearchInput, `q` closes rather than quits in Toc).
-- [ ] 6. `main.rs`: reserve the status row at both `ViewState` call sites —
+- [x] 6. `main.rs`: reserve the status row at both `ViewState` call sites —
       change `ViewState::new(layout_result.lines, height as usize)` in
       `run` and the `Event::Resize` handler's `view.set_layout(...)` call
       to pass `(height as usize).saturating_sub(1)` instead of the raw

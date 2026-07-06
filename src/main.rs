@@ -244,7 +244,7 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
     let mut view = view::ViewState::new(
         layout_result.lines,
         layout_result.heading_lines,
-        height as usize,
+        (height as usize).saturating_sub(1),
     );
 
     let io_err = |e: io::Error| format!("mdv: failed to draw: {}", clean_io_message(&e));
@@ -257,7 +257,7 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                 view.set_layout(
                     layout_result.lines,
                     layout_result.heading_lines,
-                    height as usize,
+                    (height as usize).saturating_sub(1),
                 );
                 draw(&view).map_err(io_err)?;
             }
