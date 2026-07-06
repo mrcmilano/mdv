@@ -2,10 +2,9 @@
 
 _Branch:_ `feature/issue-7-phase5-search-and-toc`
 _Date:_ 2026-07-06
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #7
-_PR:_ #<pr-number>
-<!-- filled in after first push; omit until then -->
+_PR:_ #12
 
 ---
 
@@ -282,15 +281,22 @@ writing this plan.
       is insufficient — check before adding).
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #7` to PR description;
+- [x] Update `README.md` if affected
+- [x] Convert draft PR to ready-for-review; add `Closes #7` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 7 --remove-label agent --remove-label "in progress" --add-label needs-review`
+
+## Deferred findings
+
+None. The one adversarial-review finding (search-match/highlight algorithm
+mismatch for certain Unicode case-folding, e.g. Turkish İ) was fixed in the
+same pass — see commit "fix: make search-match detection agree with
+highlight rendering (ref #7)".
 
 ---
