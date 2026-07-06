@@ -188,7 +188,7 @@ writing this plan.
       wraparound in both directions, case-insensitivity, no-match path
       (status_message set correctly), empty-query no-op, n/N with no
       active search.
-- [ ] 3. `view.rs`: search highlight mapping — given a visible `Line` and
+- [x] 3. `view.rs`: search highlight mapping — given a visible `Line` and
       the active query, split matched byte ranges of its flattened plain
       text back into span boundaries and mark the matched runs with
       `style.reverse = true` (splitting a `Span` in two/three as needed,

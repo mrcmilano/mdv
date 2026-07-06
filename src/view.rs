@@ -1,4 +1,5 @@
 use crate::layout::Line;
+use crate::style::Span;
 
 /// Section 6 interaction mode. `SearchInput` and `Toc` override Normal-mode
 /// keybindings (see `input::map`).
@@ -276,6 +277,110 @@ impl ViewState {
 /// Concatenates a `Line`'s spans into their plain text, for search matching.
 fn flatten_line(line: &Line) -> String {
     line.spans.iter().map(|span| span.text.as_str()).collect()
+}
+
+/// Case-insensitive comparison key for one char. Takes only the first
+/// `to_lowercase()` result rather than the full (possibly multi-char)
+/// expansion — an approximation for the rare characters whose lowercase form
+/// is more than one codepoint (e.g. Turkish İ), acceptable for a plain
+/// substring search.
+fn lower_char(c: char) -> char {
+    c.to_lowercase().next().unwrap_or(c)
+}
+
+/// Finds every non-overlapping, case-insensitive occurrence of `query` in
+/// `text`, returning byte ranges into `text` (not into any lowercased copy —
+/// comparison happens char-by-char against the original `char_indices` so
+/// the returned byte offsets always slice `text` cleanly, even though
+/// lowercasing can change a character's UTF-8 byte length).
+fn find_match_ranges(text: &str, query: &str) -> Vec<(usize, usize)> {
+    let needle: Vec<char> = query.chars().map(lower_char).collect();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+
+    let haystack: Vec<(usize, char)> = text
+        .char_indices()
+        .map(|(i, c)| (i, lower_char(c)))
+        .collect();
+
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i + needle.len() <= haystack.len() {
+        let is_match = (0..needle.len()).all(|k| haystack[i + k].1 == needle[k]);
+        if is_match {
+            let start = haystack[i].0;
+            let end = haystack
+                .get(i + needle.len())
+                .map(|&(b, _)| b)
+                .unwrap_or(text.len());
+            ranges.push((start, end));
+            i += needle.len();
+        } else {
+            i += 1;
+        }
+    }
+    ranges
+}
+
+/// Maps every case-insensitive occurrence of `query` in `line`'s flattened
+/// plain text back onto its spans, splitting a `Span` in two or three as
+/// needed at match boundaries (including matches that cross a span
+/// boundary) and setting `style.reverse = true` on the matched runs only.
+/// Every match gets the identical highlight — Section 6 defines a single
+/// style for all matches, current or not. Returns a clone of `line`
+/// unchanged when `query` is empty or has no matches.
+pub fn highlight_matches(line: &Line, query: &str) -> Line {
+    if query.is_empty() {
+        return line.clone();
+    }
+
+    let text = flatten_line(line);
+    let ranges = find_match_ranges(&text, query);
+    if ranges.is_empty() {
+        return line.clone();
+    }
+
+    let mut new_spans = Vec::new();
+    let mut span_start = 0usize;
+    for span in &line.spans {
+        let span_end = span_start + span.text.len();
+        let mut cursor = span_start;
+
+        for &(match_start, match_end) in &ranges {
+            let overlap_start = match_start.max(span_start);
+            let overlap_end = match_end.min(span_end);
+            if overlap_start >= overlap_end {
+                continue;
+            }
+            if cursor < overlap_start {
+                new_spans.push(Span {
+                    text: span.text[(cursor - span_start)..(overlap_start - span_start)]
+                        .to_string(),
+                    style: span.style,
+                });
+            }
+            let mut style = span.style;
+            style.reverse = true;
+            new_spans.push(Span {
+                text: span.text[(overlap_start - span_start)..(overlap_end - span_start)]
+                    .to_string(),
+                style,
+            });
+            cursor = overlap_end;
+        }
+
+        if cursor < span_end {
+            new_spans.push(Span {
+                text: span.text[(cursor - span_start)..].to_string(),
+                style: span.style,
+            });
+        }
+
+        span_start = span_end;
+    }
+
+    Line { spans: new_spans }
 }
 
 #[cfg(test)]
@@ -580,5 +685,125 @@ mod tests {
         view.prev_match();
         assert!(view.search().is_none());
         assert_eq!(view.offset(), 0);
+    }
+
+    fn plain_span(text: &str) -> crate::style::Span {
+        crate::style::Span {
+            text: text.to_string(),
+            style: crate::style::Style::default(),
+        }
+    }
+
+    #[test]
+    fn highlight_matches_marks_a_match_inside_a_single_span() {
+        let line = Line {
+            spans: vec![plain_span("hello world")],
+        };
+        let highlighted = highlight_matches(&line, "world");
+        assert_eq!(
+            highlighted.spans,
+            vec![
+                plain_span("hello "),
+                crate::style::Span {
+                    text: "world".to_string(),
+                    style: crate::style::Style {
+                        reverse: true,
+                        ..Default::default()
+                    },
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn highlight_matches_splits_a_match_crossing_a_span_boundary() {
+        let bold = crate::style::Style {
+            bold: true,
+            ..Default::default()
+        };
+        let line = Line {
+            spans: vec![
+                plain_span("hello "),
+                crate::style::Span {
+                    text: "world".to_string(),
+                    style: bold,
+                },
+            ],
+        };
+        // "lo wo" spans the boundary between "hello " (bytes 0..6) and
+        // "world" (bytes 6..11).
+        let highlighted = highlight_matches(&line, "lo wo");
+        let expected_bold_reverse = crate::style::Style {
+            bold: true,
+            reverse: true,
+            ..Default::default()
+        };
+        let plain_reverse = crate::style::Style {
+            reverse: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            highlighted.spans,
+            vec![
+                plain_span("hel"),
+                crate::style::Span {
+                    text: "lo ".to_string(),
+                    style: plain_reverse,
+                },
+                crate::style::Span {
+                    text: "wo".to_string(),
+                    style: expected_bold_reverse,
+                },
+                crate::style::Span {
+                    text: "rld".to_string(),
+                    style: bold,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn highlight_matches_marks_every_match_on_one_line_identically() {
+        let line = Line {
+            spans: vec![plain_span("needle stuff needle")],
+        };
+        let highlighted = highlight_matches(&line, "needle");
+        let reverse = crate::style::Style {
+            reverse: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            highlighted.spans,
+            vec![
+                crate::style::Span {
+                    text: "needle".to_string(),
+                    style: reverse,
+                },
+                plain_span(" stuff "),
+                crate::style::Span {
+                    text: "needle".to_string(),
+                    style: reverse,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn highlight_matches_is_case_insensitive() {
+        let line = Line {
+            spans: vec![plain_span("Hello WORLD")],
+        };
+        let highlighted = highlight_matches(&line, "world");
+        assert!(highlighted.spans[1].style.reverse);
+        assert_eq!(line_text(&highlighted), "Hello WORLD");
+    }
+
+    #[test]
+    fn highlight_matches_with_no_match_or_empty_query_returns_line_unchanged() {
+        let line = Line {
+            spans: vec![plain_span("hello world")],
+        };
+        assert_eq!(highlight_matches(&line, "").spans, line.spans);
+        assert_eq!(highlight_matches(&line, "zzz").spans, line.spans);
     }
 }
