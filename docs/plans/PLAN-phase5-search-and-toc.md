@@ -257,7 +257,7 @@ writing this plan.
       filename — never panic on any width (use `saturating_sub`/`.min()`
       throughout, matching the `layout.rs` narrow-width precedent). Track/
       pass the basename from `RunConfig`/CLI args into `run`.
-- [ ] 8. `main.rs`: TOC overlay rendering — centered box per Section 6's
+- [x] 8. `main.rs`: TOC overlay rendering — centered box per Section 6's
       geometry (`width = min(60, terminal_width.saturating_sub(4)).max(1)`,
       `height = min(heading_count + 2, terminal_height.saturating_sub(4)).max(1)`
       — clamp both to a minimum of 1 rather than underflowing or drawing a

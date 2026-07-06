@@ -21,7 +21,7 @@ use crossterm::terminal::{
     LeaveAlternateScreen,
 };
 use crossterm::{execute, queue};
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const USAGE: &str = "Usage: mdv <FILE>\n       mdv --help | -h\n       mdv --version | -V";
 
@@ -238,6 +238,120 @@ fn status_bar_line(view: &view::ViewState, filename: &str, width: usize) -> Stri
     format!("{filename}{}{right}", " ".repeat(gutter_width))
 }
 
+/// Truncates `text` to at most `max_width` display columns, appending a
+/// trailing `…` (reserving 1 column for it) when it doesn't fit as-is.
+/// Mirrors `layout::truncate_verbatim`'s reserve-a-column approach, but for
+/// plain strings rather than styled spans — this module's TOC text has no
+/// per-run styling to preserve.
+fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
+    if UnicodeWidthStr::width(text) <= max_width {
+        return text.to_string();
+    }
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let budget = max_width - 1;
+    let mut result = String::new();
+    let mut used = 0;
+    for c in text.chars() {
+        let w = UnicodeWidthChar::width(c).unwrap_or(0);
+        if used + w > budget {
+            break;
+        }
+        result.push(c);
+        used += w;
+    }
+    result.push('…');
+    result
+}
+
+/// Section 6's TOC overlay geometry: `(box_width, box_height, box_left,
+/// box_top)`. Width and height are clamped to a minimum of 1 rather than
+/// underflowing or drawing a zero-size box at very small terminal sizes;
+/// left/top center the box within the terminal.
+fn toc_box_geometry(
+    heading_count: usize,
+    term_width: u16,
+    term_height: u16,
+) -> (usize, usize, usize, usize) {
+    let box_width = 60.min((term_width as usize).saturating_sub(4)).max(1);
+    let box_height = (heading_count + 2)
+        .min((term_height as usize).saturating_sub(4))
+        .max(1);
+    let box_left = (term_width as usize).saturating_sub(box_width) / 2;
+    let box_top = (term_height as usize).saturating_sub(box_height) / 2;
+    (box_width, box_height, box_left, box_top)
+}
+
+/// Renders the Section 6 TOC overlay as an additional pass on top of
+/// whatever `draw` already put on screen: a centered box listing every
+/// heading, 2-space indented per level below H1, the current selection in
+/// reverse, overflowing heading text truncated with a trailing `…`, and
+/// `view.toc_scroll()`/`view.toc_cursor()` picking the visible window when
+/// there are more headings than rows. No-op when there are no headings —
+/// `ViewState::open_toc` already guards against entering `Mode::Toc` in that
+/// case, so this is purely defensive.
+fn draw_toc_overlay(
+    headings: &[render::TocEntry],
+    view: &view::ViewState,
+    term_width: u16,
+    term_height: u16,
+) -> io::Result<()> {
+    if headings.is_empty() {
+        return Ok(());
+    }
+
+    let (box_width, box_height, box_left, box_top) =
+        toc_box_geometry(headings.len(), term_width, term_height);
+    let interior_width = box_width.saturating_sub(2);
+    let visible_rows = box_height.saturating_sub(2);
+
+    let mut stdout = io::stdout();
+
+    let title = truncate_with_ellipsis(" Contents ", interior_width);
+    let title_width = UnicodeWidthStr::width(title.as_str());
+    let top_fill = "─".repeat(interior_width.saturating_sub(title_width));
+    queue!(stdout, MoveTo(box_left as u16, box_top as u16))?;
+    queue!(stdout, Print(format!("┌{title}{top_fill}┐")))?;
+
+    let scroll = view.toc_scroll();
+    let cursor = view.toc_cursor();
+    for row in 0..visible_rows {
+        queue!(stdout, MoveTo(box_left as u16, (box_top + 1 + row) as u16))?;
+        queue!(stdout, Print("│"))?;
+
+        let index = scroll + row;
+        let display = match headings.get(index) {
+            Some(entry) => {
+                let indent = "  ".repeat(entry.level.saturating_sub(1) as usize);
+                truncate_with_ellipsis(&format!("{indent}{}", entry.text), interior_width)
+            }
+            None => String::new(),
+        };
+        let pad =
+            " ".repeat(interior_width.saturating_sub(UnicodeWidthStr::width(display.as_str())));
+
+        if index == cursor {
+            queue!(stdout, SetAttribute(Attribute::Reverse))?;
+            queue!(stdout, Print(format!("{display}{pad}")))?;
+            queue!(stdout, SetAttribute(Attribute::Reset))?;
+        } else {
+            queue!(stdout, Print(format!("{display}{pad}")))?;
+        }
+
+        queue!(stdout, Print("│"))?;
+    }
+
+    queue!(
+        stdout,
+        MoveTo(box_left as u16, (box_top + box_height - 1) as u16)
+    )?;
+    queue!(stdout, Print(format!("└{}┘", "─".repeat(interior_width))))?;
+
+    stdout.flush()
+}
+
 /// Clears the screen and prints the current viewport's visible line slice,
 /// followed by the Section 8 status bar as the last terminal row. The only
 /// place output is written to the terminal (build plan Section 4). `\r\n`
@@ -305,6 +419,23 @@ fn draw(view: &view::ViewState, filename: &str, width: u16, height: u16) -> io::
     stdout.flush()
 }
 
+/// Draws a full frame: content + status bar, plus the TOC overlay on top
+/// when `view.mode() == Mode::Toc`. The single entry point every redraw in
+/// `run` goes through, so the overlay never gets forgotten at a call site.
+fn render_frame(
+    view: &view::ViewState,
+    filename: &str,
+    headings: &[render::TocEntry],
+    width: u16,
+    height: u16,
+) -> io::Result<()> {
+    draw(view, filename, width, height)?;
+    if view.mode() == view::Mode::Toc {
+        draw_toc_overlay(headings, view, width, height)?;
+    }
+    Ok(())
+}
+
 fn run(config: RunConfig) -> Result<ExitCode, String> {
     ensure_stdout_is_tty()?;
     let _terminal = TerminalGuard::enter().map_err(|e| {
@@ -330,7 +461,14 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
     );
 
     let io_err = |e: io::Error| format!("mdv: failed to draw: {}", clean_io_message(&e));
-    draw(&view, &config.filename, term_width, term_height).map_err(io_err)?;
+    render_frame(
+        &view,
+        &config.filename,
+        &document.headings,
+        term_width,
+        term_height,
+    )
+    .map_err(io_err)?;
 
     while let Ok(event) = read() {
         match event {
@@ -343,7 +481,14 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     layout_result.heading_lines,
                     (term_height as usize).saturating_sub(1),
                 );
-                draw(&view, &config.filename, term_width, term_height).map_err(io_err)?;
+                render_frame(
+                    &view,
+                    &config.filename,
+                    &document.headings,
+                    term_width,
+                    term_height,
+                )
+                .map_err(io_err)?;
             }
             Event::Key(key_event) => {
                 if key_event.kind != KeyEventKind::Press {
@@ -360,8 +505,14 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     Some(action) => action,
                     None => {
                         if had_status_message {
-                            draw(&view, &config.filename, term_width, term_height)
-                                .map_err(io_err)?;
+                            render_frame(
+                                &view,
+                                &config.filename,
+                                &document.headings,
+                                term_width,
+                                term_height,
+                            )
+                            .map_err(io_err)?;
                         }
                         continue;
                     }
@@ -387,7 +538,14 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                 }
 
                 if view.offset() != previous_offset || had_status_message {
-                    draw(&view, &config.filename, term_width, term_height).map_err(io_err)?;
+                    render_frame(
+                        &view,
+                        &config.filename,
+                        &document.headings,
+                        term_width,
+                        term_height,
+                    )
+                    .map_err(io_err)?;
                 }
             }
             _ => {}
@@ -716,6 +874,69 @@ mod tests {
         let view = view_with(5, 10);
         for width in [0, 1, 2] {
             let _ = status_bar_line(&view, "a-very-long-filename.md", width);
+        }
+    }
+
+    #[test]
+    fn truncate_with_ellipsis_leaves_short_text_unchanged() {
+        assert_eq!(truncate_with_ellipsis("hello", 10), "hello");
+        assert_eq!(truncate_with_ellipsis("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_with_ellipsis_reserves_a_column_for_the_mark() {
+        assert_eq!(truncate_with_ellipsis("hello world", 5), "hell…");
+    }
+
+    #[test]
+    fn truncate_with_ellipsis_never_panics_at_zero_width() {
+        assert_eq!(truncate_with_ellipsis("hello", 0), "");
+    }
+
+    #[test]
+    fn toc_box_geometry_caps_width_at_60_and_clamps_to_terminal_size() {
+        let (width, height, left, top) = toc_box_geometry(3, 200, 100);
+        assert_eq!(width, 60);
+        assert_eq!(height, 5); // 3 headings + 2 border rows
+        assert_eq!(left, (200 - 60) / 2);
+        assert_eq!(top, (100 - 5) / 2);
+    }
+
+    #[test]
+    fn toc_box_geometry_shrinks_to_fit_a_small_terminal_without_underflow() {
+        let (width, height, _, _) = toc_box_geometry(50, 10, 8);
+        assert_eq!(width, 6); // 10 - 4
+        assert_eq!(height, 4); // 8 - 4
+    }
+
+    #[test]
+    fn toc_box_geometry_never_underflows_at_degenerate_terminal_sizes() {
+        for (w, h) in [(0, 0), (1, 1), (3, 3), (4, 4)] {
+            let (width, height, left, top) = toc_box_geometry(5, w, h);
+            assert!(width >= 1);
+            assert!(height >= 1);
+            assert!(left <= w as usize);
+            assert!(top <= h as usize);
+        }
+    }
+
+    #[test]
+    fn draw_toc_overlay_never_panics_at_degenerate_terminal_sizes() {
+        let headings = vec![
+            render::TocEntry {
+                level: 1,
+                text: "Intro".to_string(),
+                block_index: 0,
+            },
+            render::TocEntry {
+                level: 2,
+                text: "Details".to_string(),
+                block_index: 1,
+            },
+        ];
+        let view = view_with(20, 10);
+        for (w, h) in [(0, 0), (1, 1), (3, 3), (5, 5), (80, 24)] {
+            let _ = draw_toc_overlay(&headings, &view, w, h);
         }
     }
 }
