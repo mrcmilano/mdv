@@ -223,12 +223,20 @@ impl ViewState {
             return;
         }
 
-        let needle = query.to_lowercase();
+        // Reuses `find_match_ranges` (rather than a simpler
+        // `flatten_line(line).to_lowercase().contains(...)`) so a line only
+        // counts as a match here if `highlight_matches` will actually find
+        // something to highlight on it at render time. The two algorithms
+        // disagree for a handful of Unicode characters whose full
+        // `to_lowercase()` expands to more than one codepoint (e.g. Turkish
+        // İ → "i̇"): a naive `.contains()` check on fully-lowercased strings
+        // would then report a match `n`/`N` jumps to, with nothing
+        // highlighted once it's on screen.
         let matches: Vec<usize> = self
             .lines
             .iter()
             .enumerate()
-            .filter(|(_, line)| flatten_line(line).to_lowercase().contains(&needle))
+            .filter(|(_, line)| !find_match_ranges(&flatten_line(line), &query).is_empty())
             .map(|(i, _)| i)
             .collect();
 
@@ -735,6 +743,27 @@ mod tests {
         typed(&mut view, "ALPHA");
         view.execute_search();
         assert_eq!(view.search().unwrap().matches, vec![0]);
+    }
+
+    /// Regression test: a line counted as a `matches` entry must always have
+    /// something for `highlight_matches` to actually highlight, using the
+    /// exact same query. Turkish İ's full `to_lowercase()` expands to two
+    /// codepoints ("i̇"), which broke a naive `str::to_lowercase().contains()`
+    /// match check without ever showing a highlight — see `execute_search`.
+    #[test]
+    fn every_matched_line_has_something_highlight_matches_can_find() {
+        let mut view = ViewState::new(text_lines(&["İstanbul"]), Vec::new(), 10);
+        typed(&mut view, "istanbul");
+        view.execute_search();
+        let search = view
+            .search()
+            .expect("expected a match on the İstanbul line");
+        assert_eq!(search.matches, vec![0]);
+        let highlighted = highlight_matches(&text_lines(&["İstanbul"])[0], &search.query);
+        assert!(
+            highlighted.spans.iter().any(|s| s.style.reverse),
+            "line counted as a match must actually highlight something"
+        );
     }
 
     #[test]
