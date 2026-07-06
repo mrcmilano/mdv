@@ -173,7 +173,7 @@ writing this plan.
       `Normal` and clears `search` (resolved decision above); it does not
       need to touch `status_message`. Unit tests for construction/
       resize-reset behavior.
-- [ ] 2. `view.rs`: search execution — case-insensitive substring scan over
+- [x] 2. `view.rs`: search execution — case-insensitive substring scan over
       each `Line`'s concatenated plain text (helper to flatten a `Line`'s
       spans into a `String`), building `SearchState.matches`. On execute:
       empty query → no-op, return to `Mode::Normal`, do not touch any

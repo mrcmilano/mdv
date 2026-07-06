@@ -158,6 +158,124 @@ impl ViewState {
     pub fn jump_to_bottom(&mut self) {
         self.offset = self.max_offset();
     }
+
+    /// Scrolls the minimum amount needed to bring `line` into the viewport,
+    /// without forcing it to any particular row — unlike `toc_jump`, which
+    /// the Phase 5 plan pins to the top row explicitly, search's spec only
+    /// says matches must be "visible" (initial jump) or "re-scrolled...
+    /// visible" (`n`/`N`), so this preserves as much of the surrounding
+    /// context as possible and keeps the `offset <= max_offset` invariant
+    /// every other scroll method maintains.
+    fn ensure_line_visible(&mut self, line: usize) {
+        if line < self.offset {
+            self.offset = line;
+        } else if self.viewport_height > 0 && line >= self.offset + self.viewport_height {
+            self.offset = (line + 1).saturating_sub(self.viewport_height);
+        }
+    }
+
+    /// Enters `Mode::SearchInput` with an empty query buffer (`/` in Normal
+    /// mode). Deliberately does not touch any existing `search` — Esc or an
+    /// empty Enter must leave a previous search's highlights/matches intact.
+    pub fn start_search(&mut self) {
+        self.mode = Mode::SearchInput;
+        self.search_input.clear();
+    }
+
+    pub fn search_push_char(&mut self, c: char) {
+        self.search_input.push(c);
+    }
+
+    pub fn search_backspace(&mut self) {
+        self.search_input.pop();
+    }
+
+    /// Cancels the in-progress query (Esc in `SearchInput`), discarding the
+    /// buffer without touching any existing `search`.
+    pub fn cancel_search_input(&mut self) {
+        self.mode = Mode::Normal;
+        self.search_input.clear();
+    }
+
+    /// Runs the in-progress query (Enter in `SearchInput`). Empty query is a
+    /// no-op that leaves any existing `search`/`status_message` untouched; a
+    /// non-empty query with no matches clears `search` and sets a transient
+    /// `status_message`; a non-empty query with matches replaces `search`
+    /// and scrolls to the first match at or after the current offset,
+    /// wrapping to the top of the document if none qualify.
+    pub fn execute_search(&mut self) {
+        let query = std::mem::take(&mut self.search_input);
+        self.mode = Mode::Normal;
+
+        if query.is_empty() {
+            return;
+        }
+
+        let needle = query.to_lowercase();
+        let matches: Vec<usize> = self
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| flatten_line(line).to_lowercase().contains(&needle))
+            .map(|(i, _)| i)
+            .collect();
+
+        if matches.is_empty() {
+            self.search = None;
+            self.status_message = Some(format!("Pattern not found: {query}"));
+            return;
+        }
+
+        let current = matches
+            .iter()
+            .position(|&line| line >= self.offset)
+            .unwrap_or(0);
+        let target_line = matches[current];
+        self.ensure_line_visible(target_line);
+        self.search = Some(SearchState {
+            query,
+            matches,
+            current,
+        });
+    }
+
+    /// Cycles to the next match, wrapping past the last back to the first.
+    /// Silent no-op when there is no active search (Section 7: any key not
+    /// listed is ignored silently — `n`/`N` with no search falls under it).
+    pub fn next_match(&mut self) {
+        let Some(search) = self.search.as_mut() else {
+            return;
+        };
+        if search.matches.is_empty() {
+            return;
+        }
+        search.current = (search.current + 1) % search.matches.len();
+        let line = search.matches[search.current];
+        self.ensure_line_visible(line);
+    }
+
+    /// Cycles to the previous match, wrapping past the first back to the
+    /// last. Silent no-op when there is no active search.
+    pub fn prev_match(&mut self) {
+        let Some(search) = self.search.as_mut() else {
+            return;
+        };
+        if search.matches.is_empty() {
+            return;
+        }
+        search.current = if search.current == 0 {
+            search.matches.len() - 1
+        } else {
+            search.current - 1
+        };
+        let line = search.matches[search.current];
+        self.ensure_line_visible(line);
+    }
+}
+
+/// Concatenates a `Line`'s spans into their plain text, for search matching.
+fn flatten_line(line: &Line) -> String {
+    line.spans.iter().map(|span| span.text.as_str()).collect()
 }
 
 #[cfg(test)]
@@ -177,6 +295,18 @@ mod tests {
 
     fn line_text(line: &Line) -> String {
         line.spans.iter().map(|s| s.text.as_str()).collect()
+    }
+
+    fn text_lines(texts: &[&str]) -> Vec<Line> {
+        texts
+            .iter()
+            .map(|t| Line {
+                spans: vec![crate::style::Span {
+                    text: t.to_string(),
+                    style: crate::style::Style::default(),
+                }],
+            })
+            .collect()
     }
 
     #[test]
@@ -312,5 +442,143 @@ mod tests {
         assert!(view.search().is_none());
         assert_eq!(view.search_input(), "");
         assert_eq!(view.heading_lines(), &[0, 5]);
+    }
+
+    fn typed(view: &mut ViewState, query: &str) {
+        view.start_search();
+        for c in query.chars() {
+            view.search_push_char(c);
+        }
+    }
+
+    #[test]
+    fn start_search_enters_search_input_mode_without_touching_prior_search() {
+        let mut view = ViewState::new(text_lines(&["alpha", "beta"]), Vec::new(), 10);
+        typed(&mut view, "alpha");
+        view.execute_search();
+        assert!(view.search().is_some());
+
+        view.start_search();
+        assert_eq!(view.mode(), Mode::SearchInput);
+        assert_eq!(view.search_input(), "");
+        assert!(view.search().is_some(), "prior search must survive re-opening SearchInput");
+    }
+
+    #[test]
+    fn search_backspace_removes_last_char() {
+        let mut view = ViewState::new(text_lines(&["alpha"]), Vec::new(), 10);
+        typed(&mut view, "abc");
+        view.search_backspace();
+        assert_eq!(view.search_input(), "ab");
+    }
+
+    #[test]
+    fn empty_query_execute_is_a_no_op() {
+        let mut view = ViewState::new(text_lines(&["alpha", "beta"]), Vec::new(), 10);
+        typed(&mut view, "beta");
+        view.execute_search();
+        let before = view.search().cloned();
+
+        view.start_search();
+        view.execute_search();
+        assert_eq!(view.mode(), Mode::Normal);
+        assert_eq!(view.search().cloned(), before, "empty submit must not touch existing search");
+        assert!(view.status_message().is_none());
+    }
+
+    #[test]
+    fn cancel_search_input_discards_buffer_without_touching_existing_search() {
+        let mut view = ViewState::new(text_lines(&["alpha", "beta"]), Vec::new(), 10);
+        typed(&mut view, "alpha");
+        view.execute_search();
+        let before = view.search().cloned();
+
+        view.start_search();
+        view.search_push_char('z');
+        view.cancel_search_input();
+        assert_eq!(view.mode(), Mode::Normal);
+        assert_eq!(view.search().cloned(), before);
+    }
+
+    #[test]
+    fn non_empty_query_with_no_matches_sets_status_message_and_clears_search() {
+        let mut view = ViewState::new(text_lines(&["alpha", "beta"]), Vec::new(), 10);
+        typed(&mut view, "alpha");
+        view.execute_search();
+        assert!(view.search().is_some());
+
+        typed(&mut view, "zzz");
+        view.execute_search();
+        assert_eq!(view.mode(), Mode::Normal);
+        assert!(view.search().is_none());
+        assert_eq!(
+            view.status_message(),
+            Some("Pattern not found: zzz"),
+            "no-match search must clear any prior search highlights"
+        );
+    }
+
+    #[test]
+    fn search_is_case_insensitive() {
+        let mut view = ViewState::new(text_lines(&["Alpha Beta"]), Vec::new(), 10);
+        typed(&mut view, "ALPHA");
+        view.execute_search();
+        assert_eq!(view.search().unwrap().matches, vec![0]);
+    }
+
+    #[test]
+    fn execute_search_jumps_to_first_match_at_or_after_offset() {
+        let mut view = ViewState::new(
+            text_lines(&["needle", "plain", "needle", "plain", "needle"]),
+            Vec::new(),
+            2,
+        );
+        view.scroll_down(3); // offset = 3
+        typed(&mut view, "needle");
+        view.execute_search();
+        let search = view.search().unwrap();
+        assert_eq!(search.matches, vec![0, 2, 4]);
+        assert_eq!(search.current, 2, "line 4 is the first match >= offset 3");
+        assert!(view.offset() <= 4 && view.offset() + 2 > 4);
+    }
+
+    #[test]
+    fn execute_search_wraps_to_top_match_when_none_at_or_after_offset() {
+        let mut view = ViewState::new(text_lines(&["needle", "plain", "plain"]), Vec::new(), 10);
+        view.jump_to_bottom();
+        typed(&mut view, "needle");
+        view.execute_search();
+        assert_eq!(view.search().unwrap().current, 0);
+    }
+
+    #[test]
+    fn next_match_wraps_past_the_last_match() {
+        let mut view = ViewState::new(text_lines(&["needle", "plain", "needle"]), Vec::new(), 10);
+        typed(&mut view, "needle");
+        view.execute_search();
+        assert_eq!(view.search().unwrap().current, 0);
+        view.next_match();
+        assert_eq!(view.search().unwrap().current, 1);
+        view.next_match();
+        assert_eq!(view.search().unwrap().current, 0, "wraps past the last match");
+    }
+
+    #[test]
+    fn prev_match_wraps_past_the_first_match() {
+        let mut view = ViewState::new(text_lines(&["needle", "plain", "needle"]), Vec::new(), 10);
+        typed(&mut view, "needle");
+        view.execute_search();
+        assert_eq!(view.search().unwrap().current, 0);
+        view.prev_match();
+        assert_eq!(view.search().unwrap().current, 1, "wraps before the first match");
+    }
+
+    #[test]
+    fn next_and_prev_match_are_silent_no_ops_without_an_active_search() {
+        let mut view = ViewState::new(text_lines(&["alpha"]), Vec::new(), 10);
+        view.next_match();
+        view.prev_match();
+        assert!(view.search().is_none());
+        assert_eq!(view.offset(), 0);
     }
 }
