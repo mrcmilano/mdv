@@ -262,7 +262,7 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                 draw(&view).map_err(io_err)?;
             }
             Event::Key(key_event) => {
-                let action = match input::map(key_event) {
+                let action = match input::map(key_event, view.mode()) {
                     Some(action) => action,
                     None => continue,
                 };
@@ -282,6 +282,8 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     input::Action::Quit => {
                         unreachable!("Quit is handled above before this match")
                     }
+                    // Wired up in task 10.
+                    _ => {}
                 }
 
                 if view.offset() != previous_offset {

@@ -219,7 +219,7 @@ writing this plan.
       headingless document is a no-op, up/down clamp at both ends,
       toc_scroll only moves when the cursor would leave the window, jump
       lands the heading at the top.
-- [ ] 5. `input.rs`: extend `Action` with `ToggleToc`, `StartSearch`,
+- [x] 5. `input.rs`: extend `Action` with `ToggleToc`, `StartSearch`,
       `NextMatch`, `PrevMatch`, `Escape`, `SearchChar(char)`,
       `SearchBackspace`, `SearchExecute`, `TocUp`, `TocDown`, `TocJump`
       (dedicated Toc actions, not reused `LineUp`/`LineDown` — those carry

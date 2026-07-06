@@ -120,7 +120,12 @@ impl ViewState {
     /// any active/in-progress search, regardless of what mode this was
     /// called from — re-running a search or TOC overlay against relaid-out
     /// text is out of scope (Phase 5 plan, Resolved design decisions).
-    pub fn set_layout(&mut self, lines: Vec<Line>, heading_lines: Vec<usize>, viewport_height: usize) {
+    pub fn set_layout(
+        &mut self,
+        lines: Vec<Line>,
+        heading_lines: Vec<usize>,
+        viewport_height: usize,
+    ) {
         self.lines = lines;
         self.viewport_height = viewport_height;
         self.heading_lines = heading_lines;
@@ -647,7 +652,10 @@ mod tests {
         view.start_search();
         assert_eq!(view.mode(), Mode::SearchInput);
         assert_eq!(view.search_input(), "");
-        assert!(view.search().is_some(), "prior search must survive re-opening SearchInput");
+        assert!(
+            view.search().is_some(),
+            "prior search must survive re-opening SearchInput"
+        );
     }
 
     #[test]
@@ -668,7 +676,11 @@ mod tests {
         view.start_search();
         view.execute_search();
         assert_eq!(view.mode(), Mode::Normal);
-        assert_eq!(view.search().cloned(), before, "empty submit must not touch existing search");
+        assert_eq!(
+            view.search().cloned(),
+            before,
+            "empty submit must not touch existing search"
+        );
         assert!(view.status_message().is_none());
     }
 
@@ -746,7 +758,11 @@ mod tests {
         view.next_match();
         assert_eq!(view.search().unwrap().current, 1);
         view.next_match();
-        assert_eq!(view.search().unwrap().current, 0, "wraps past the last match");
+        assert_eq!(
+            view.search().unwrap().current,
+            0,
+            "wraps past the last match"
+        );
     }
 
     #[test]
@@ -756,7 +772,11 @@ mod tests {
         view.execute_search();
         assert_eq!(view.search().unwrap().current, 0);
         view.prev_match();
-        assert_eq!(view.search().unwrap().current, 1, "wraps before the first match");
+        assert_eq!(
+            view.search().unwrap().current,
+            1,
+            "wraps before the first match"
+        );
     }
 
     #[test]
@@ -918,13 +938,21 @@ mod tests {
         view.open_toc(10);
         assert_eq!(view.toc_cursor(), 0);
         view.toc_up(10);
-        assert_eq!(view.toc_cursor(), 0, "must clamp at the first entry, not wrap");
+        assert_eq!(
+            view.toc_cursor(),
+            0,
+            "must clamp at the first entry, not wrap"
+        );
 
         view.toc_down(10);
         view.toc_down(10);
         assert_eq!(view.toc_cursor(), 2);
         view.toc_down(10);
-        assert_eq!(view.toc_cursor(), 2, "must clamp at the last entry, not wrap");
+        assert_eq!(
+            view.toc_cursor(),
+            2,
+            "must clamp at the last entry, not wrap"
+        );
     }
 
     #[test]
@@ -943,13 +971,21 @@ mod tests {
 
         view.toc_down(5);
         assert_eq!(view.toc_cursor(), 5);
-        assert_eq!(view.toc_scroll(), 1, "scroll nudges by exactly one, not re-centered");
+        assert_eq!(
+            view.toc_scroll(),
+            1,
+            "scroll nudges by exactly one, not re-centered"
+        );
 
         for _ in 0..5 {
             view.toc_up(5);
         }
         assert_eq!(view.toc_cursor(), 0);
-        assert_eq!(view.toc_scroll(), 0, "scroll nudges back down once cursor leaves the top");
+        assert_eq!(
+            view.toc_scroll(),
+            0,
+            "scroll nudges back down once cursor leaves the top"
+        );
     }
 
     #[test]
@@ -980,6 +1016,9 @@ mod tests {
         view.execute_search();
         assert!(view.search().is_some());
         view.escape();
-        assert!(view.search().is_none(), "Esc in Normal mode clears highlights");
+        assert!(
+            view.search().is_none(),
+            "Esc in Normal mode clears highlights"
+        );
     }
 }
