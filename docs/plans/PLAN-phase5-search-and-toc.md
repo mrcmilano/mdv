@@ -271,7 +271,7 @@ writing this plan.
       entirely with `/query▌`, truncating the query display (not the
       underlying `String`) from the left if it doesn't fit `terminal_width`
       so the cursor marker `▌` stays visible.
-- [ ] 10. `main.rs`: wire the event loop through the mode-aware
+- [x] 10. `main.rs`: wire the event loop through the mode-aware
       `input::map` and dispatch all new `Action` variants to the `view.rs`
       methods from tasks 2-4; redraw on every state-changing action (not
       just offset changes, since search/TOC/status_message state changes

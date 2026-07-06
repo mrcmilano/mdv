@@ -306,6 +306,44 @@ fn toc_box_geometry(
     (box_width, box_height, box_left, box_top)
 }
 
+/// The number of heading rows the TOC box can actually show (its interior,
+/// excluding the top/bottom border) — what `ViewState::open_toc`/`toc_up`/
+/// `toc_down` need as their `visible_rows` argument, computed the same way
+/// `draw_toc_overlay` sizes the box so the two stay in sync.
+fn toc_visible_rows(heading_count: usize, term_width: u16, term_height: u16) -> usize {
+    let (_, box_height, _, _) = toc_box_geometry(heading_count, term_width, term_height);
+    box_height.saturating_sub(2)
+}
+
+/// The subset of `ViewState` that affects what's on screen, snapshotted
+/// before dispatching a keypress and compared after so the event loop
+/// redraws on *any* state-changing action — not just the ones that move
+/// `offset`, since search/TOC/status-message state can change without it.
+#[derive(PartialEq)]
+struct RedrawSnapshot {
+    offset: usize,
+    mode: view::Mode,
+    toc_cursor: usize,
+    toc_scroll: usize,
+    has_status_message: bool,
+    has_search: bool,
+    search_current: usize,
+    search_input: String,
+}
+
+fn redraw_snapshot(view: &view::ViewState) -> RedrawSnapshot {
+    RedrawSnapshot {
+        offset: view.offset(),
+        mode: view.mode(),
+        toc_cursor: view.toc_cursor(),
+        toc_scroll: view.toc_scroll(),
+        has_status_message: view.status_message().is_some(),
+        has_search: view.search().is_some(),
+        search_current: view.search().map(|s| s.current).unwrap_or(0),
+        search_input: view.search_input().to_string(),
+    }
+}
+
 /// Renders the Section 6 TOC overlay as an additional pass on top of
 /// whatever `draw` already put on screen: a centered box listing every
 /// heading, 2-space indented per level below H1, the current selection in
@@ -522,16 +560,18 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     continue;
                 }
 
+                let before = redraw_snapshot(&view);
+
                 // Cleared unconditionally on every processed keypress,
                 // whether or not it maps to a recognized Action (Phase 5
-                // plan, Resolved design decisions).
-                let had_status_message = view.status_message().is_some();
+                // plan, Resolved design decisions). Captured in `before`
+                // above so clearing it still triggers a redraw below.
                 view.clear_status_message();
 
                 let action = match input::map(key_event, view.mode()) {
                     Some(action) => action,
                     None => {
-                        if had_status_message {
+                        if redraw_snapshot(&view) != before {
                             render_frame(
                                 &view,
                                 &config.filename,
@@ -549,7 +589,8 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     break;
                 }
 
-                let previous_offset = view.offset();
+                let visible_rows =
+                    toc_visible_rows(view.heading_lines().len(), term_width, term_height);
                 match action {
                     input::Action::LineDown => view.scroll_down(1),
                     input::Action::LineUp => view.scroll_up(1),
@@ -557,14 +598,29 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     input::Action::HalfPageUp => view.half_page_up(),
                     input::Action::Top => view.jump_to_top(),
                     input::Action::Bottom => view.jump_to_bottom(),
+                    input::Action::ToggleToc => {
+                        if view.heading_lines().is_empty() {
+                            view.set_status_message("No headings".to_string());
+                        } else {
+                            view.open_toc(visible_rows);
+                        }
+                    }
+                    input::Action::StartSearch => view.start_search(),
+                    input::Action::NextMatch => view.next_match(),
+                    input::Action::PrevMatch => view.prev_match(),
+                    input::Action::Escape => view.escape(),
+                    input::Action::SearchChar(c) => view.search_push_char(c),
+                    input::Action::SearchBackspace => view.search_backspace(),
+                    input::Action::SearchExecute => view.execute_search(),
+                    input::Action::TocUp => view.toc_up(visible_rows),
+                    input::Action::TocDown => view.toc_down(visible_rows),
+                    input::Action::TocJump => view.toc_jump(),
                     input::Action::Quit => {
                         unreachable!("Quit is handled above before this match")
                     }
-                    // Wired up in task 10.
-                    _ => {}
                 }
 
-                if view.offset() != previous_offset || had_status_message {
+                if redraw_snapshot(&view) != before {
                     render_frame(
                         &view,
                         &config.filename,
