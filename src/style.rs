@@ -12,8 +12,8 @@ pub const QUOTE: Color = Color::Green;
 pub const TASK_CHECKED: Color = Color::Green;
 
 /// Terminal text style, restricted to crossterm's 16 ANSI colors (no RGB, per
-/// Section 5) so the user's terminal theme applies. `reverse` is reserved for
-/// the Phase 5 search-match highlight; nothing sets it yet.
+/// Section 5) so the user's terminal theme applies. `reverse` is set by
+/// Phase 5's search-match highlighting (`view::highlight_matches`).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Style {
     pub fg: Option<Color>,
