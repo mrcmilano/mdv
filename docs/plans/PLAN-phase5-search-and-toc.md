@@ -276,7 +276,7 @@ writing this plan.
       methods from tasks 2-4; redraw on every state-changing action (not
       just offset changes, since search/TOC/status_message state changes
       without moving `offset` too).
-- [ ] 11. Extend `docs/mdv-build-plan.md`-referenced test corpus
+- [x] 11. Extend `docs/mdv-build-plan.md`-referenced test corpus
       (`tests/corpus.md`) if needed so the corpus continues to exercise
       headings at multiple levels for TOC coverage (only if current corpus
       is insufficient — check before adding).
