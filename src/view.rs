@@ -108,6 +108,12 @@ impl ViewState {
         self.offset
     }
 
+    /// Total wrapped line count, for the Section 8 status bar's
+    /// `current/total`.
+    pub fn total_lines(&self) -> usize {
+        self.lines.len()
+    }
+
     /// The lines currently visible in the viewport, in order.
     pub fn visible_lines(&self) -> &[Line] {
         let end = (self.offset + self.viewport_height).min(self.lines.len());
@@ -506,6 +512,13 @@ mod tests {
         assert_eq!(view.max_offset(), 0);
         assert_eq!(view.offset(), 0);
         assert!(view.visible_lines().is_empty());
+        assert_eq!(view.total_lines(), 0);
+    }
+
+    #[test]
+    fn total_lines_reports_the_full_wrapped_line_count() {
+        let view = ViewState::new(lines(20), Vec::new(), 10);
+        assert_eq!(view.total_lines(), 20);
     }
 
     #[test]

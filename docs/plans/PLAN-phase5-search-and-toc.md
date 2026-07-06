@@ -241,7 +241,7 @@ writing this plan.
       to pass `(height as usize).saturating_sub(1)` instead of the raw
       terminal height, so content and status bar never overlap and
       `height == 0` can't underflow.
-- [ ] 7. `main.rs`: status bar (Section 8) — render a reversed-video row as
+- [x] 7. `main.rs`: status bar (Section 8) — render a reversed-video row as
       the last terminal row: file basename left-aligned; right-aligned
       `percentage% · current/total · t:toc /:search q:quit` where
       `current` is `offset + 1` (1-indexed) and `percentage` uses the

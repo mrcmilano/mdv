@@ -14,13 +14,14 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use crossterm::cursor::{Hide, MoveTo, Show};
-use crossterm::event::{read, Event};
+use crossterm::event::{read, Event, KeyEventKind};
 use crossterm::style::{Attribute, Print, SetAttribute, SetForegroundColor};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
     LeaveAlternateScreen,
 };
 use crossterm::{execute, queue};
+use unicode_width::UnicodeWidthStr;
 
 const USAGE: &str = "Usage: mdv <FILE>\n       mdv --help | -h\n       mdv --version | -V";
 
@@ -41,6 +42,8 @@ Keybindings (Normal mode):
 #[derive(Debug)]
 struct RunConfig {
     contents: String,
+    /// Basename of the file being viewed, for the Section 8 status bar.
+    filename: String,
 }
 
 #[derive(Debug)]
@@ -110,7 +113,13 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     let contents = String::from_utf8(bytes)
         .map_err(|_| format!("mdv: '{}' is not valid UTF-8", path.display()))?;
 
-    Ok(Cli::Run(RunConfig { contents }))
+    let filename = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(path.to_str().unwrap_or(""))
+        .to_string();
+
+    Ok(Cli::Run(RunConfig { contents, filename }))
 }
 
 fn ensure_stdout_is_tty() -> Result<(), String> {
@@ -174,9 +183,65 @@ impl Drop for TerminalGuard {
     }
 }
 
-/// Clears the screen and prints the current viewport's visible line slice.
-/// The only place output is written to the terminal (build plan Section 4).
-/// `\r\n` (not `\n`) is required between lines: raw mode disables the
+/// `offset * 100 / max(1, max_offset)`, clamped to 0-100 (Section 8's exact
+/// formula; `max_offset()` already equals `lines.len().saturating_sub
+/// (viewport_height)`). Always numeric — `offset`/`max_offset` can diverge
+/// from the `<= max_offset` invariant other scrolling maintains (e.g. after
+/// `toc_jump`, which the Phase 5 plan pins to the top row even at the very
+/// end of the document), so this is explicitly clamped rather than assumed
+/// to land in range.
+fn scroll_percentage(view: &view::ViewState) -> usize {
+    let denominator = view.max_offset().max(1);
+    (view.offset() * 100 / denominator).min(100)
+}
+
+/// Picks the first candidate (in order: most detailed to least) whose
+/// display width fits alongside `filename_width` within `width`, requiring a
+/// 1-column gutter when the candidate is non-empty. Falls back to the last
+/// candidate (conventionally `""`) if none fit — the caller never truncates
+/// the filename itself, so an overlong filename is simply allowed to run
+/// past `width`, matching every other narrow-terminal path in this codebase
+/// (clip/omit content, never panic).
+fn pick_fitting_right_text(filename_width: usize, candidates: &[&str], width: usize) -> String {
+    for &candidate in candidates {
+        let candidate_width = UnicodeWidthStr::width(candidate);
+        let gutter = if candidate.is_empty() { 0 } else { 1 };
+        if filename_width + gutter + candidate_width <= width {
+            return candidate.to_string();
+        }
+    }
+    candidates.last().copied().unwrap_or("").to_string()
+}
+
+/// Builds the exact Section 8 status-bar row (or its `status_message`
+/// override), left-aligning `filename` and right-aligning the
+/// percentage/count/hint block (or message), padded/truncated to exactly
+/// `width` display columns. Truncation priority when it doesn't all fit:
+/// drop the hint first, then the percentage/count block, before ever
+/// truncating the filename (Phase 5 plan, Resolved design decisions).
+fn status_bar_line(view: &view::ViewState, filename: &str, width: usize) -> String {
+    let filename_width = UnicodeWidthStr::width(filename);
+
+    let right = if let Some(message) = view.status_message() {
+        pick_fitting_right_text(filename_width, &[message, ""], width)
+    } else {
+        let percentage = scroll_percentage(view);
+        let current = view.offset() + 1;
+        let total = view.total_lines();
+        let full = format!("{percentage}% · {current}/{total} · t:toc /:search q:quit");
+        let without_hint = format!("{percentage}% · {current}/{total}");
+        pick_fitting_right_text(filename_width, &[&full, &without_hint, ""], width)
+    };
+
+    let right_width = UnicodeWidthStr::width(right.as_str());
+    let gutter_width = width.saturating_sub(filename_width + right_width);
+    format!("{filename}{}{right}", " ".repeat(gutter_width))
+}
+
+/// Clears the screen and prints the current viewport's visible line slice,
+/// followed by the Section 8 status bar as the last terminal row. The only
+/// place output is written to the terminal (build plan Section 4). `\r\n`
+/// (not `\n`) is required between lines: raw mode disables the
 /// newline-to-CRLF translation a cooked terminal normally performs, so a
 /// bare `\n` would move down without returning to column 0. The separator is
 /// placed *between* lines, never after the last one: printing it after the
@@ -187,14 +252,23 @@ impl Drop for TerminalGuard {
 /// Each span's full style is set explicitly (not diffed against the
 /// previous span) and reset immediately after its text, so style never
 /// bleeds onto whatever prints next regardless of what preceded it.
-fn draw(view: &view::ViewState) -> io::Result<()> {
+fn draw(view: &view::ViewState, filename: &str, width: u16, height: u16) -> io::Result<()> {
     let mut stdout = io::stdout();
     queue!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
     for (i, line) in view.visible_lines().iter().enumerate() {
         if i > 0 {
             queue!(stdout, Print("\r\n"))?;
         }
-        for span in &line.spans {
+
+        let highlighted;
+        let spans: &[style::Span] = if let Some(search) = view.search() {
+            highlighted = view::highlight_matches(line, &search.query);
+            &highlighted.spans
+        } else {
+            &line.spans
+        };
+
+        for span in spans {
             if let Some(color) = span.style.fg {
                 queue!(stdout, SetForegroundColor(color))?;
             }
@@ -220,6 +294,14 @@ fn draw(view: &view::ViewState) -> io::Result<()> {
             queue!(stdout, SetAttribute(Attribute::Reset))?;
         }
     }
+
+    let status_row = height.saturating_sub(1);
+    let line = status_bar_line(view, filename, width as usize);
+    queue!(stdout, MoveTo(0, status_row))?;
+    queue!(stdout, SetAttribute(Attribute::Reverse))?;
+    queue!(stdout, Print(&line))?;
+    queue!(stdout, SetAttribute(Attribute::Reset))?;
+
     stdout.flush()
 }
 
@@ -234,37 +316,55 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
 
     let document = render::build_document(&config.contents);
 
-    let (width, height) = size().map_err(|e| {
+    let (mut term_width, mut term_height) = size().map_err(|e| {
         format!(
             "mdv: failed to query terminal size: {}",
             clean_io_message(&e)
         )
     })?;
-    let layout_result = layout::wrap(&document, width as usize);
+    let layout_result = layout::wrap(&document, term_width as usize);
     let mut view = view::ViewState::new(
         layout_result.lines,
         layout_result.heading_lines,
-        (height as usize).saturating_sub(1),
+        (term_height as usize).saturating_sub(1),
     );
 
     let io_err = |e: io::Error| format!("mdv: failed to draw: {}", clean_io_message(&e));
-    draw(&view).map_err(io_err)?;
+    draw(&view, &config.filename, term_width, term_height).map_err(io_err)?;
 
     while let Ok(event) = read() {
         match event {
             Event::Resize(width, height) => {
-                let layout_result = layout::wrap(&document, width as usize);
+                term_width = width;
+                term_height = height;
+                let layout_result = layout::wrap(&document, term_width as usize);
                 view.set_layout(
                     layout_result.lines,
                     layout_result.heading_lines,
-                    (height as usize).saturating_sub(1),
+                    (term_height as usize).saturating_sub(1),
                 );
-                draw(&view).map_err(io_err)?;
+                draw(&view, &config.filename, term_width, term_height).map_err(io_err)?;
             }
             Event::Key(key_event) => {
+                if key_event.kind != KeyEventKind::Press {
+                    continue;
+                }
+
+                // Cleared unconditionally on every processed keypress,
+                // whether or not it maps to a recognized Action (Phase 5
+                // plan, Resolved design decisions).
+                let had_status_message = view.status_message().is_some();
+                view.clear_status_message();
+
                 let action = match input::map(key_event, view.mode()) {
                     Some(action) => action,
-                    None => continue,
+                    None => {
+                        if had_status_message {
+                            draw(&view, &config.filename, term_width, term_height)
+                                .map_err(io_err)?;
+                        }
+                        continue;
+                    }
                 };
 
                 if action == input::Action::Quit {
@@ -286,8 +386,8 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
                     _ => {}
                 }
 
-                if view.offset() != previous_offset {
-                    draw(&view).map_err(io_err)?;
+                if view.offset() != previous_offset || had_status_message {
+                    draw(&view, &config.filename, term_width, term_height).map_err(io_err)?;
                 }
             }
             _ => {}
@@ -445,6 +545,10 @@ mod tests {
         match parse_args(args(&[file.path.to_str().unwrap()])).expect("expected Ok") {
             Cli::Run(config) => {
                 assert_eq!(config.contents, "# Hello\n\nworld\n");
+                assert_eq!(
+                    config.filename,
+                    file.path.file_name().unwrap().to_str().unwrap()
+                );
             }
             _ => panic!("expected Cli::Run"),
         }
@@ -516,6 +620,102 @@ mod tests {
         let document = render::build_document(&markdown);
         for width in [1, 2, 40] {
             let _ = layout::wrap(&document, width);
+        }
+    }
+
+    fn view_with(total_lines: usize, viewport_height: usize) -> view::ViewState {
+        let lines: Vec<layout::Line> = (0..total_lines)
+            .map(|_| layout::Line { spans: Vec::new() })
+            .collect();
+        view::ViewState::new(lines, Vec::new(), viewport_height)
+    }
+
+    #[test]
+    fn scroll_percentage_is_0_at_top_and_100_at_bottom() {
+        let mut view = view_with(100, 10);
+        assert_eq!(scroll_percentage(&view), 0);
+        view.jump_to_bottom();
+        assert_eq!(scroll_percentage(&view), 100);
+    }
+
+    #[test]
+    fn scroll_percentage_never_exceeds_100_even_past_max_offset() {
+        // A document that fits entirely in the viewport has max_offset() ==
+        // 0; nothing should divide by zero or exceed 100%.
+        let view = view_with(5, 10);
+        assert_eq!(scroll_percentage(&view), 0);
+    }
+
+    #[test]
+    fn pick_fitting_right_text_prefers_the_first_candidate_that_fits() {
+        let candidates = ["full hint here", "short", ""];
+        assert_eq!(
+            pick_fitting_right_text(10, &candidates, 30),
+            "full hint here"
+        );
+        assert_eq!(pick_fitting_right_text(10, &candidates, 17), "short");
+        assert_eq!(pick_fitting_right_text(10, &candidates, 11), "");
+    }
+
+    #[test]
+    fn pick_fitting_right_text_falls_back_to_empty_when_filename_alone_overflows() {
+        let candidates = ["full hint here", "short", ""];
+        assert_eq!(pick_fitting_right_text(50, &candidates, 10), "");
+    }
+
+    #[test]
+    fn status_bar_line_lays_out_filename_left_and_stats_right() {
+        let view = view_with(284, 10);
+        let line = status_bar_line(&view, "notes.md", 80);
+        assert!(line.starts_with("notes.md"));
+        assert!(line.ends_with("t:toc /:search q:quit"));
+        assert!(line.contains("0% · 1/284"));
+        assert_eq!(UnicodeWidthStr::width(line.as_str()), 80);
+    }
+
+    #[test]
+    fn status_bar_line_drops_hint_then_stats_before_ever_truncating_filename() {
+        let view = view_with(284, 10);
+        let filename = "notes.md";
+        let filename_width = UnicodeWidthStr::width(filename);
+
+        let full = "0% · 1/284 · t:toc /:search q:quit";
+        let without_hint = "0% · 1/284";
+        let full_needed = filename_width + 1 + UnicodeWidthStr::width(full);
+        let without_hint_needed = filename_width + 1 + UnicodeWidthStr::width(without_hint);
+
+        let with_hint = status_bar_line(&view, filename, full_needed);
+        assert!(with_hint.contains("t:toc"));
+
+        let dropped_hint = status_bar_line(&view, filename, full_needed - 1);
+        assert!(
+            !dropped_hint.contains("t:toc"),
+            "hint must be dropped first"
+        );
+        assert!(dropped_hint.contains("0% · 1/284"));
+
+        let dropped_stats = status_bar_line(&view, filename, without_hint_needed - 1);
+        assert!(!dropped_stats.contains('%'), "stats must be dropped next");
+        assert!(
+            dropped_stats.starts_with(filename),
+            "filename itself must never be truncated"
+        );
+    }
+
+    #[test]
+    fn status_bar_line_shows_status_message_instead_of_stats() {
+        let mut view = view_with(284, 10);
+        view.set_status_message("Pattern not found: xyz".to_string());
+        let line = status_bar_line(&view, "notes.md", 80);
+        assert!(line.contains("Pattern not found: xyz"));
+        assert!(!line.contains('%'));
+    }
+
+    #[test]
+    fn status_bar_line_never_panics_at_degenerate_widths() {
+        let view = view_with(5, 10);
+        for width in [0, 1, 2] {
+            let _ = status_bar_line(&view, "a-very-long-filename.md", width);
         }
     }
 }
