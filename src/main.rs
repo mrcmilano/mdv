@@ -241,7 +241,11 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
         )
     })?;
     let layout_result = layout::wrap(&document, width as usize);
-    let mut view = view::ViewState::new(layout_result.lines, height as usize);
+    let mut view = view::ViewState::new(
+        layout_result.lines,
+        layout_result.heading_lines,
+        height as usize,
+    );
 
     let io_err = |e: io::Error| format!("mdv: failed to draw: {}", clean_io_message(&e));
     draw(&view).map_err(io_err)?;
@@ -250,7 +254,11 @@ fn run(config: RunConfig) -> Result<ExitCode, String> {
         match event {
             Event::Resize(width, height) => {
                 let layout_result = layout::wrap(&document, width as usize);
-                view.set_layout(layout_result.lines, height as usize);
+                view.set_layout(
+                    layout_result.lines,
+                    layout_result.heading_lines,
+                    height as usize,
+                );
                 draw(&view).map_err(io_err)?;
             }
             Event::Key(key_event) => {

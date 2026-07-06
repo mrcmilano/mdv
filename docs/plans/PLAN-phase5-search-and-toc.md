@@ -2,7 +2,7 @@
 
 _Branch:_ `feature/issue-7-phase5-search-and-toc`
 _Date:_ 2026-07-06
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #7
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -163,7 +163,7 @@ writing this plan.
 
 - [ ] 0. Create branch `feature/issue-7-phase5-search-and-toc` from develop
       following docs/git-workflow.md
-- [ ] 1. `view.rs`: add `Mode` enum (`Normal`, `SearchInput`, `Toc`) and
+- [x] 1. `view.rs`: add `Mode` enum (`Normal`, `SearchInput`, `Toc`) and
       `SearchState` struct (`query: String, matches: Vec<usize>, current:
       usize`) per Section 6. Extend `ViewState` with `mode: Mode`, `search:
       Option<SearchState>`, `toc_cursor: usize`, `toc_scroll: usize`,
