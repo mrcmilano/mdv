@@ -198,7 +198,7 @@ writing this plan.
       distinct style for the "current" match. Unit tests: match inside a
       single span, match crossing a span boundary (e.g. spanning into a
       bold run), multiple matches on one line.
-- [ ] 4. `view.rs`: TOC navigation — `open_toc` sets `toc_cursor` to the
+- [x] 4. `view.rs`: TOC navigation — `open_toc` sets `toc_cursor` to the
       last heading whose `heading_lines[i] <= offset` (or `0` if none
       qualify — i.e. the offset is before the first heading), initializes
       `toc_scroll` so that heading is within the visible window, and is a

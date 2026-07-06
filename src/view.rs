@@ -272,6 +272,87 @@ impl ViewState {
         let line = search.matches[search.current];
         self.ensure_line_visible(line);
     }
+
+    /// Esc's mode-dependent behavior (Section 7: "close overlay / cancel
+    /// search input / clear search highlights"): closes the TOC overlay in
+    /// `Toc` mode, discards the in-progress query in `SearchInput` mode
+    /// (leaving any existing `search` untouched, same as an empty Enter), or
+    /// clears active search highlights in `Normal` mode.
+    pub fn escape(&mut self) {
+        match self.mode {
+            Mode::Toc => self.close_toc(),
+            Mode::SearchInput => self.cancel_search_input(),
+            Mode::Normal => self.search = None,
+        }
+    }
+
+    /// Opens the TOC overlay (`t` in Normal mode). No-op when the document
+    /// has no headings — the caller is responsible for surfacing a "No
+    /// headings" status message in that case. Otherwise sets `toc_cursor` to
+    /// the last heading at or before the current `offset` (`0` if the
+    /// offset precedes every heading) and `toc_scroll` so that heading
+    /// starts the visible window, unless it's close enough to the end of
+    /// the list that doing so would leave blank rows below the last entry.
+    /// `visible_rows` is the number of heading rows the TOC box can show at
+    /// the terminal's current size (computed by the caller, not stored).
+    pub fn open_toc(&mut self, visible_rows: usize) {
+        if self.heading_lines.is_empty() {
+            return;
+        }
+        self.toc_cursor = self
+            .heading_lines
+            .iter()
+            .rposition(|&line| line <= self.offset)
+            .unwrap_or(0);
+        self.toc_scroll = self
+            .toc_cursor
+            .min(self.heading_lines.len().saturating_sub(visible_rows));
+        self.mode = Mode::Toc;
+    }
+
+    pub fn close_toc(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    /// Nudges `toc_scroll` only far enough to keep `toc_cursor` inside a
+    /// `visible_rows`-tall window (clamp-scroll, not re-centering).
+    fn clamp_toc_scroll(&mut self, visible_rows: usize) {
+        if visible_rows == 0 {
+            return;
+        }
+        if self.toc_cursor < self.toc_scroll {
+            self.toc_scroll = self.toc_cursor;
+        } else if self.toc_cursor >= self.toc_scroll + visible_rows {
+            self.toc_scroll = self.toc_cursor + 1 - visible_rows;
+        }
+    }
+
+    /// Moves the TOC selection up one heading, clamped at the first entry
+    /// (no wraparound, consistent with every other navigation in the app).
+    pub fn toc_up(&mut self, visible_rows: usize) {
+        self.toc_cursor = self.toc_cursor.saturating_sub(1);
+        self.clamp_toc_scroll(visible_rows);
+    }
+
+    /// Moves the TOC selection down one heading, clamped at the last entry.
+    /// The `saturating_sub(1)` is defensive: `open_toc` guards against an
+    /// empty `heading_lines`, so this should never actually run against one,
+    /// but must not panic if that invariant is ever violated.
+    pub fn toc_down(&mut self, visible_rows: usize) {
+        let last = self.heading_lines.len().saturating_sub(1);
+        self.toc_cursor = (self.toc_cursor + 1).min(last);
+        self.clamp_toc_scroll(visible_rows);
+    }
+
+    /// Jumps to the selected heading (Enter in `Toc` mode), making its line
+    /// the top visible line, and returns to `Mode::Normal`. Uses `.get()`
+    /// defensively; `toc_cursor` should always be in bounds by construction.
+    pub fn toc_jump(&mut self) {
+        if let Some(&line) = self.heading_lines.get(self.toc_cursor) {
+            self.offset = line;
+        }
+        self.mode = Mode::Normal;
+    }
 }
 
 /// Concatenates a `Line`'s spans into their plain text, for search matching.
@@ -805,5 +886,100 @@ mod tests {
         };
         assert_eq!(highlight_matches(&line, "").spans, line.spans);
         assert_eq!(highlight_matches(&line, "zzz").spans, line.spans);
+    }
+
+    #[test]
+    fn open_toc_lands_on_the_nearest_preceding_heading() {
+        let mut view = ViewState::new(lines(20), vec![0, 5, 10, 15], 10);
+        view.scroll_down(7); // offset = 7, between headings at 5 and 10
+        view.open_toc(10);
+        assert_eq!(view.mode(), Mode::Toc);
+        assert_eq!(view.toc_cursor(), 1); // heading_lines[1] == 5 <= 7
+    }
+
+    #[test]
+    fn open_toc_before_the_first_heading_lands_on_index_zero() {
+        let mut view = ViewState::new(lines(20), vec![5, 10], 10);
+        assert_eq!(view.offset(), 0);
+        view.open_toc(10);
+        assert_eq!(view.toc_cursor(), 0);
+    }
+
+    #[test]
+    fn open_toc_on_a_headingless_document_is_a_no_op() {
+        let mut view = ViewState::new(lines(20), Vec::new(), 10);
+        view.open_toc(10);
+        assert_eq!(view.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn toc_up_and_down_clamp_at_both_ends_without_wrapping() {
+        let mut view = ViewState::new(lines(20), vec![0, 5, 10], 10);
+        view.open_toc(10);
+        assert_eq!(view.toc_cursor(), 0);
+        view.toc_up(10);
+        assert_eq!(view.toc_cursor(), 0, "must clamp at the first entry, not wrap");
+
+        view.toc_down(10);
+        view.toc_down(10);
+        assert_eq!(view.toc_cursor(), 2);
+        view.toc_down(10);
+        assert_eq!(view.toc_cursor(), 2, "must clamp at the last entry, not wrap");
+    }
+
+    #[test]
+    fn toc_scroll_only_moves_when_the_cursor_would_leave_the_window() {
+        let heading_lines: Vec<usize> = (0..20).collect();
+        let mut view = ViewState::new(lines(20), heading_lines, 10);
+        view.open_toc(5); // 5 visible rows
+        assert_eq!(view.toc_cursor(), 0);
+        assert_eq!(view.toc_scroll(), 0);
+
+        for _ in 0..4 {
+            view.toc_down(5);
+        }
+        assert_eq!(view.toc_cursor(), 4);
+        assert_eq!(view.toc_scroll(), 0, "cursor still inside the first window");
+
+        view.toc_down(5);
+        assert_eq!(view.toc_cursor(), 5);
+        assert_eq!(view.toc_scroll(), 1, "scroll nudges by exactly one, not re-centered");
+
+        for _ in 0..5 {
+            view.toc_up(5);
+        }
+        assert_eq!(view.toc_cursor(), 0);
+        assert_eq!(view.toc_scroll(), 0, "scroll nudges back down once cursor leaves the top");
+    }
+
+    #[test]
+    fn toc_jump_makes_the_selected_heading_the_top_line_and_returns_to_normal() {
+        let mut view = ViewState::new(lines(20), vec![0, 5, 10], 10);
+        view.open_toc(10);
+        view.toc_down(10);
+        view.toc_jump();
+        assert_eq!(view.mode(), Mode::Normal);
+        assert_eq!(view.offset(), 5);
+    }
+
+    #[test]
+    fn escape_closes_toc_cancels_search_input_or_clears_highlights_by_mode() {
+        let mut view = ViewState::new(text_lines(&["needle", "plain"]), vec![0], 10);
+
+        view.open_toc(10);
+        view.escape();
+        assert_eq!(view.mode(), Mode::Normal);
+
+        view.start_search();
+        view.search_push_char('x');
+        view.escape();
+        assert_eq!(view.mode(), Mode::Normal);
+        assert_eq!(view.search_input(), "");
+
+        typed(&mut view, "needle");
+        view.execute_search();
+        assert!(view.search().is_some());
+        view.escape();
+        assert!(view.search().is_none(), "Esc in Normal mode clears highlights");
     }
 }
