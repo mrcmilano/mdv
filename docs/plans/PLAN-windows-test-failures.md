@@ -67,7 +67,7 @@ failures in `src/main.rs`, both test-code portability gaps rather than real
 ## Tasks
 
 ### Implementation
-- [ ] 0. Create branch `fix/issue-18-windows-test-failures` from develop following docs/git-workflow.md
+- [x] 0. Create branch `fix/issue-18-windows-test-failures` from develop following docs/git-workflow.md
 - [x] 1. Fix `unreadable_file_is_an_error`: instead of asserting against the
       hardcoded Unix string, call `fs::read(&path)` directly in the test to
       get a fresh `io::Error` for the same (still-missing) path, pass it
