@@ -2,7 +2,7 @@
 
 _Branch:_ `fix/issue-18-windows-test-failures`
 _Date:_ 2026-07-28
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #18
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -69,7 +69,7 @@ failures in `src/main.rs`, both test-code portability gaps rather than real
 
 ### Implementation
 - [ ] 0. Create branch `fix/issue-18-windows-test-failures` from develop following docs/git-workflow.md
-- [ ] 1. Fix `unreadable_file_is_an_error`: instead of asserting against the
+- [x] 1. Fix `unreadable_file_is_an_error`: instead of asserting against the
       hardcoded Unix string, call `fs::read(&path)` directly in the test to
       get a fresh `io::Error` for the same (still-missing) path, pass it
       through the crate's existing `clean_io_message`, and build the

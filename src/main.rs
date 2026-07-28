@@ -761,11 +761,13 @@ mod tests {
         let path = env::temp_dir().join("mdv-test-does-not-exist.md");
         let _ = fs::remove_file(&path);
         let err = parse_args(args(&[path.to_str().unwrap()])).expect_err("expected error");
+        let io_err = fs::read(&path).expect_err("path must still not exist");
         assert_eq!(
             err,
             format!(
-                "mdv: cannot read '{}': No such file or directory",
-                path.display()
+                "mdv: cannot read '{}': {}",
+                path.display(),
+                clean_io_message(&io_err)
             )
         );
     }
