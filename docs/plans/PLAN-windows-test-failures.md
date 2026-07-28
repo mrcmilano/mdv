@@ -76,7 +76,7 @@ failures in `src/main.rs`, both test-code portability gaps rather than real
       expected string with the same `format!("mdv: cannot read '{}': {}",
       path.display(), ...)` pattern production uses at `src/main.rs:105-111`.
       Assert equality against that dynamically-built string, not a literal.
-- [ ] 2. Fix `corpus_snapshot_at_width_80`: normalize `\r\n` → `\n` on the
+- [x] 2. Fix `corpus_snapshot_at_width_80`: normalize `\r\n` → `\n` on the
       snapshot file (`tests/snapshots/corpus.txt`) read from disk before
       comparing against the in-memory rendered string. Do not touch the
       `tests/corpus.md` read — see Open questions for why.

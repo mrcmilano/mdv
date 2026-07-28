@@ -845,7 +845,9 @@ mod tests {
             return;
         }
 
-        let expected = fs::read_to_string(snapshot_path).expect("read tests/snapshots/corpus.txt");
+        let expected = fs::read_to_string(snapshot_path)
+            .expect("read tests/snapshots/corpus.txt")
+            .replace("\r\n", "\n");
         assert_eq!(
             rendered, expected,
             "corpus snapshot mismatch; run with UPDATE_SNAPSHOTS=1 to regenerate"
