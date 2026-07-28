@@ -1,0 +1,39 @@
+name: Audit
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Cargo.lock changes
+        id: lockfile
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+          fi
+
+          if [ -z "$base_sha" ] || ! git cat-file -e "$base_sha" 2>/dev/null; then
+            # No usable base commit (e.g. first push of a new branch) — run the
+            # audit rather than silently skip it.
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$base_sha" "${{ github.sha }}" | grep -qx "Cargo.lock"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: rustsec/audit-check@v2.0.0
+        if: steps.lockfile.outputs.changed == 'true'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
