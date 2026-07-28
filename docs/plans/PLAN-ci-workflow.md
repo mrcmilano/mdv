@@ -122,3 +122,21 @@ avoid pins silently going stale, which is scope beyond issue #15.
 
 ## Deferred findings
 <!-- Populated only if adversarial-review produces LOW findings that are deferred. -->
+
+- **`test (windows-latest)` fails on this PR's own CI run — 2 pre-existing test
+  failures, not caused by this change.** The new OS matrix (a deliberate
+  plan decision, see "Resolved decisions") surfaced two portability gaps in
+  the existing test suite that no prior CI ever exercised:
+  - `unreadable_file_is_an_error` (`src/main.rs:764`) asserts the exact Unix
+    OS error string `"No such file or directory"`, which differs on Windows.
+  - `corpus_snapshot_at_width_80` (`src/main.rs:847`) compares in-memory
+    `\n`-terminated output against a snapshot file that Windows runners
+    check out with `\r\n` line endings (`core.autocrlf`).
+  - Rationale for deferring: fixing these requires source-file changes,
+    which contradicts this plan's stated scope ("New files only, no source
+    changes" — Impact assessment). User decision (Assess-equivalent
+    discussion during Finish): leave the CI config as specified, document
+    here, and track the source fix separately.
+  - Tracked as follow-up: #18. The `windows-latest` `test` job will show red
+    on this PR and will continue to do so until #18 is resolved — this is
+    expected and not a defect in the CI workflow itself.
