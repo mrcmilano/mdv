@@ -101,7 +101,7 @@ avoid pins silently going stale, which is scope beyond issue #15.
 - [x] 0. Create branch `chore/issue-15-ci-workflow` from develop following docs/git-workflow.md
 - [x] 1. Add `.github/workflows/ci.yml` with three separate jobs — `fmt` (ubuntu-latest, `rustfmt` component), `clippy` (matrix: ubuntu/macos/windows, `clippy` component, `--locked`), `test` (same matrix, no extra components, `--locked`) — triggered on push/PR to `main`/`develop`
 - [x] 2. Add `.github/workflows/audit.yml`: single ubuntu-latest job, same triggers, using a plain `git diff --name-only` step to detect `Cargo.lock` changes and a step-level `if:` to gate `rustsec/audit-check`
-- [ ] 3. Add CI status badges for both workflows to `README.md`
+- [x] 3. Add CI status badges for both workflows to `README.md`
 
 ### Finish
 - [ ] Write / update tests for all implementation tasks above

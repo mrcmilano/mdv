@@ -1,5 +1,8 @@
 # mdv
 
+[![CI](https://github.com/mrcmilano/mdv/actions/workflows/ci.yml/badge.svg)](https://github.com/mrcmilano/mdv/actions/workflows/ci.yml)
+[![Audit](https://github.com/mrcmilano/mdv/actions/workflows/audit.yml/badge.svg)](https://github.com/mrcmilano/mdv/actions/workflows/audit.yml)
+
 A lean, read-only, interactive terminal Markdown viewer, written in Rust.
 
 `mdv` opens a Markdown file and lets you scroll through it in your terminal —
