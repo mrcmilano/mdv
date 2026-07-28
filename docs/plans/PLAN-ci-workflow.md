@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-15-ci-workflow`
 _Date:_ 2026-07-28
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #15
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -99,7 +99,7 @@ avoid pins silently going stale, which is scope beyond issue #15.
 
 ### Implementation
 - [x] 0. Create branch `chore/issue-15-ci-workflow` from develop following docs/git-workflow.md
-- [ ] 1. Add `.github/workflows/ci.yml` with three separate jobs — `fmt` (ubuntu-latest, `rustfmt` component), `clippy` (matrix: ubuntu/macos/windows, `clippy` component, `--locked`), `test` (same matrix, no extra components, `--locked`) — triggered on push/PR to `main`/`develop`
+- [x] 1. Add `.github/workflows/ci.yml` with three separate jobs — `fmt` (ubuntu-latest, `rustfmt` component), `clippy` (matrix: ubuntu/macos/windows, `clippy` component, `--locked`), `test` (same matrix, no extra components, `--locked`) — triggered on push/PR to `main`/`develop`
 - [ ] 2. Add `.github/workflows/audit.yml`: single ubuntu-latest job, same triggers, using a plain `git diff --name-only` step to detect `Cargo.lock` changes and a step-level `if:` to gate `rustsec/audit-check`
 - [ ] 3. Add CI status badges for both workflows to `README.md`
 
