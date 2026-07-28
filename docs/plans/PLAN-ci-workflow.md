@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-15-ci-workflow`
 _Date:_ 2026-07-28
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #15
 _PR:_ #<pr-number>
 <!-- filled in after first push; omit until then -->
@@ -104,18 +104,20 @@ avoid pins silently going stale, which is scope beyond issue #15.
 - [x] 3. Add CI status badges for both workflows to `README.md`
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
+- [x] Write / update tests for all implementation tasks above
       (N/A for CI-only config — verification is the workflows running green
       on the draft PR itself; note this explicitly rather than skipping
-      silently)
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
-      (FIX REQUIRED: add tasks to Implementation above and complete them;
-       LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #15` to PR description;
+      silently. `fmt`/`clippy`/`test` green on ubuntu-latest and macos-latest,
+      and `audit` green on ubuntu-latest; `test (windows-latest)` red due to
+      pre-existing issues, see Deferred findings and #18)
+- [x] Run full test suite — all tests pass locally (167/167); CI matrix
+      confirms green on ubuntu/macos, see above for the one known exception
+- [x] Run `/skill:adversarial-review` — PASS, no FIX REQUIRED findings; one
+      LOW finding documented in Deferred findings below
+- [x] Update `README.md` if affected — CI/Audit badges added (task 3)
+- [x] Convert draft PR to ready-for-review; add `Closes #15` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 15 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
