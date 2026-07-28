@@ -2,10 +2,9 @@
 
 _Branch:_ `fix/issue-18-windows-test-failures`
 _Date:_ 2026-07-28
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #18
-_PR:_ #<pr-number>
-<!-- filled in after first push; omit until then -->
+_PR:_ #19
 
 ---
 
@@ -80,7 +79,7 @@ failures in `src/main.rs`, both test-code portability gaps rather than real
       snapshot file (`tests/snapshots/corpus.txt`) read from disk before
       comparing against the in-memory rendered string. Do not touch the
       `tests/corpus.md` read — see Open questions for why.
-- [ ] 3. Push the branch and open/update the draft PR targeting `develop`,
+- [x] 3. Push the branch and open/update the draft PR targeting `develop`,
       then confirm the GitHub Actions `test (windows-latest)` job passes
       with both `unreadable_file_is_an_error` and `corpus_snapshot_at_width_80`
       green. This is the only real signal for this issue — local test runs
@@ -90,15 +89,16 @@ failures in `src/main.rs`, both test-code portability gaps rather than real
       before continuing to Finish.
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #18` to PR description;
+      → PASS, no findings.
+- [x] Update `README.md` if affected — not affected (test-only change).
+- [x] Convert draft PR to ready-for-review; add `Closes #18` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 18 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
