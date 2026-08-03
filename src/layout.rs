@@ -44,7 +44,7 @@ fn sanitize_with_tab(text: &str, tab_replacement: &str) -> String {
 
 /// `sanitize_with_tab` with the "elsewhere" tab rule (a single space) —
 /// every source-derived text outside a code block's own content uses this.
-fn sanitize(text: &str) -> String {
+pub(crate) fn sanitize(text: &str) -> String {
     sanitize_with_tab(text, " ")
 }
 

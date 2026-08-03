@@ -2,7 +2,7 @@
 
 _Branch:_ `fix/issue-21-sanitize-filename`
 _Date:_ 2026-08-03
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #21
 
 ---
@@ -75,7 +75,7 @@ suggestion after reviewing the actual code, both reflected in task 2 below:
 
 ### Implementation
 - [x] 0. Create branch `fix/issue-21-sanitize-filename` from develop following docs/git-workflow.md
-- [ ] 1. In `src/layout.rs`, change `fn sanitize(text: &str) -> String` to
+- [x] 1. In `src/layout.rs`, change `fn sanitize(text: &str) -> String` to
       `pub(crate) fn sanitize(...)` (leave `sanitize_with_tab`/`sanitize_code`
       private — only `sanitize` is needed outside the module).
 - [ ] 2. In `src/main.rs`, add a private helper
