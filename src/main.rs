@@ -81,6 +81,17 @@ fn collect_args<I: IntoIterator<Item = std::ffi::OsString>>(
         .collect()
 }
 
+/// Sanitizes a filename for display in the status bar. A filename on Unix may
+/// contain any byte except `/` and NUL, including raw escape sequences (e.g.
+/// OSC 52), so it needs the same protection as Markdown content
+/// (`layout::sanitize`). `layout::sanitize` alone is not sufficient here: it
+/// intentionally lets `\n` through for Markdown body text, but the filename
+/// is rendered as a single terminal line, so a raw newline is replaced with a
+/// space on top of the shared sanitizer.
+fn sanitize_filename(raw: &str) -> String {
+    layout::sanitize(raw).replace('\n', " ")
+}
+
 fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     let mut path: Option<String> = None;
     for arg in args {
@@ -113,11 +124,11 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
     let contents = String::from_utf8(bytes)
         .map_err(|_| format!("mdv: '{}' is not valid UTF-8", path.display()))?;
 
-    let filename = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(path.to_str().unwrap_or(""))
-        .to_string();
+    let filename = sanitize_filename(
+        path.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(path.to_str().unwrap_or("")),
+    );
 
     Ok(Cli::Run(RunConfig { contents, filename }))
 }
@@ -693,6 +704,23 @@ mod tests {
         }
     }
 
+    impl TempFile {
+        /// Like `new`, but the filename is built from an explicit raw byte
+        /// sequence (mirroring `non_utf8_argument_is_an_error_not_a_panic`'s
+        /// use of `OsStringExt` below) instead of the counter-based `.md`
+        /// name — needed to construct a filename containing a raw control
+        /// byte such as ESC.
+        #[cfg(unix)]
+        fn with_name_bytes(name_bytes: Vec<u8>, contents: &[u8]) -> Self {
+            use std::ffi::OsString;
+            use std::os::unix::ffi::OsStringExt;
+
+            let path = env::temp_dir().join(OsString::from_vec(name_bytes));
+            fs::write(&path, contents).expect("write temp file");
+            TempFile { path }
+        }
+    }
+
     impl Drop for TempFile {
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.path);
@@ -792,6 +820,42 @@ mod tests {
                     config.filename,
                     file.path.file_name().unwrap().to_str().unwrap()
                 );
+            }
+            _ => panic!("expected Cli::Run"),
+        }
+    }
+
+    #[test]
+    fn sanitize_filename_removes_esc_byte() {
+        let out = sanitize_filename("evil\u{001b}name.md");
+        assert!(!out.as_bytes().contains(&0x1b));
+    }
+
+    #[test]
+    fn sanitize_filename_neutralizes_osc52_sequence() {
+        let out = sanitize_filename("before\u{001b}]52;c;BASE64DATA==\u{0007}after.md");
+        assert!(!out.as_bytes().contains(&0x1b));
+    }
+
+    #[test]
+    fn sanitize_filename_replaces_embedded_newline_with_space() {
+        let out = sanitize_filename("evil\nname.md");
+        assert_eq!(out, "evil name.md");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn filename_containing_a_raw_esc_byte_is_sanitized_by_parse_args() {
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let mut name_bytes = format!("mdv-test-esc-{}-{n}-", std::process::id()).into_bytes();
+        name_bytes.push(0x1b);
+        name_bytes.extend_from_slice(b".md");
+
+        let file = TempFile::with_name_bytes(name_bytes, b"# Hello\n");
+        match parse_args(args(&[file.path.to_str().unwrap()])).expect("expected Ok") {
+            Cli::Run(config) => {
+                assert!(!config.filename.as_bytes().contains(&0x1b));
             }
             _ => panic!("expected Cli::Run"),
         }

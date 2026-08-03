@@ -78,7 +78,7 @@ suggestion after reviewing the actual code, both reflected in task 2 below:
 - [x] 1. In `src/layout.rs`, change `fn sanitize(text: &str) -> String` to
       `pub(crate) fn sanitize(...)` (leave `sanitize_with_tab`/`sanitize_code`
       private — only `sanitize` is needed outside the module).
-- [ ] 2. In `src/main.rs`, add a private helper
+- [x] 2. In `src/main.rs`, add a private helper
       `fn sanitize_filename(raw: &str) -> String` that calls
       `layout::sanitize(raw)` and additionally replaces any remaining `'\n'`
       with a single space (see "Note on scope beyond the issue text" above
