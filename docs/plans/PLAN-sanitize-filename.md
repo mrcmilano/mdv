@@ -2,7 +2,7 @@
 
 _Branch:_ `fix/issue-21-sanitize-filename`
 _Date:_ 2026-08-03
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #21
 
 ---
@@ -109,15 +109,16 @@ suggestion after reviewing the actual code, both reflected in task 2 below:
         `docs/plans/PLAN-windows-test-failures.md` (issue #18).
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #21` to PR description;
+      Result: PASS, no findings requiring fixes.
+- [x] Update `README.md` if affected — not affected, no changes needed.
+- [x] Convert draft PR to ready-for-review; add `Closes #21` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 21 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
