@@ -2,7 +2,7 @@
 
 _Branch:_ `fix/issue-22-bom-heading`
 _Date:_ 2026-08-04
-_Status:_ IN PROGRESS
+_Status:_ READY
 <!-- DRAFT        → APPROVED:      user approves via label flip (needs-review → agent, see AGENTS.md §5) -->
 <!-- APPROVED     → IN PROGRESS:   first code task commit (task 1+); -->
 <!--                              branch creation (task 0) does NOT flip it -->
@@ -98,15 +98,16 @@ in `layout.rs` is out of scope by design since it runs post-parse).
       wouldn't distinguish "leading-only" from "any line-start" stripping.
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Write / update tests for all implementation tasks above
+- [x] Run full test suite — all tests pass
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected
-- [ ] Convert draft PR to ready-for-review; add `Closes #22` to PR description;
+      Result: PASS, no findings. Followed by pre-merge-code-review: APPROVE, no findings.
+- [x] Update `README.md` if affected — no BOM/known-issues references present; nothing to update.
+- [x] Convert draft PR to ready-for-review; add `Closes #22` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 22 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
