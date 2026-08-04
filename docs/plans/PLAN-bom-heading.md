@@ -2,7 +2,7 @@
 
 _Branch:_ `fix/issue-22-bom-heading`
 _Date:_ 2026-08-04
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 <!-- DRAFT        → APPROVED:      user approves via label flip (needs-review → agent, see AGENTS.md §5) -->
 <!-- APPROVED     → IN PROGRESS:   first code task commit (task 1+); -->
 <!--                              branch creation (task 0) does NOT flip it -->
@@ -69,11 +69,11 @@ in `layout.rs` is out of scope by design since it runs post-parse).
 
 ### Implementation
 - [x] 0. Create branch `fix/issue-22-bom-heading` from develop following docs/git-workflow.md
-- [ ] 1. In `render::build_document` (src/render.rs), strip a single leading
+- [x] 1. In `render::build_document` (src/render.rs), strip a single leading
       `U+FEFF` from `markdown` before constructing `Parser::new_ext`, using
       `str::strip_prefix('\u{FEFF}')` (only strips if it's the very first
       character; no-op otherwise).
-- [ ] 2. Add a unit test in `src/render.rs`'s test module asserting
+- [x] 2. Add a unit test in `src/render.rs`'s test module asserting
       `build_document("\u{FEFF}# Hello")` produces a `Heading` block (level 1)
       — not a `Paragraph` — and a populated `TocEntry`. Note: level-1 headings
       are uppercased by existing logic (see
@@ -82,7 +82,7 @@ in `layout.rs` is out of scope by design since it runs post-parse).
       `"Hello"` — mirror that test's assertion shape, not the level-2
       `heading_produces_heading_block_and_toc_entry` example, to avoid a
       test that fails against otherwise-correct output.
-- [ ] 3. Add a second unit test locking in the "leading-only" scope boundary
+- [x] 3. Add a second unit test locking in the "leading-only" scope boundary
       for a BOM appearing mid-document (not as the file's first character) —
       per the issue, this is explicitly out of scope and must not be
       stripped. Use a two-*paragraph* input with a blank-line separator

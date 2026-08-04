@@ -608,6 +608,7 @@ fn parse_blocks<'a, I: Iterator<Item = Event<'a>>>(
 /// subtree via `skip_subtree`, contributing no `Block`/`Span` and never
 /// panicking.
 pub fn build_document(markdown: &str) -> Document {
+    let markdown = markdown.strip_prefix('\u{FEFF}').unwrap_or(markdown);
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
@@ -660,6 +661,59 @@ mod tests {
                 block_index: 0,
             }]
         );
+    }
+
+    #[test]
+    fn leading_bom_is_stripped_before_heading_parses() {
+        // A leading BOM (U+FEFF) is not `#` or whitespace, so pulldown-cmark
+        // would otherwise parse this as a paragraph starting with the BOM
+        // character. level-1 headings are uppercased (see
+        // h1_uppercases_all_inline_content_including_code), so "Hello"
+        // becomes "HELLO" here too.
+        let doc = build_document("\u{FEFF}# Hello");
+        assert_eq!(
+            doc.blocks,
+            vec![Block::Heading {
+                level: 1,
+                spans: vec![Span {
+                    text: "HELLO".to_string(),
+                    style: Style::default(),
+                }],
+            }]
+        );
+        assert_eq!(
+            doc.headings,
+            vec![TocEntry {
+                level: 1,
+                text: "HELLO".to_string(),
+                block_index: 0,
+            }]
+        );
+    }
+
+    #[test]
+    fn bom_is_only_stripped_when_leading_not_mid_document() {
+        // A BOM that isn't the very first character of the file is left
+        // alone — only a file-leading BOM is in scope per the issue.
+        let doc = build_document("para\n\n\u{FEFF}# Heading");
+        assert_eq!(
+            doc.blocks,
+            vec![
+                Block::Paragraph {
+                    spans: vec![Span {
+                        text: "para".to_string(),
+                        style: Style::default(),
+                    }],
+                },
+                Block::Paragraph {
+                    spans: vec![Span {
+                        text: "\u{FEFF}# Heading".to_string(),
+                        style: Style::default(),
+                    }],
+                },
+            ]
+        );
+        assert!(doc.headings.is_empty());
     }
 
     #[test]
