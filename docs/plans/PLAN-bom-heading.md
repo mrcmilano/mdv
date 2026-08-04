@@ -12,8 +12,7 @@ _Status:_ READY
 <!-- file is no longer being updated. -->
 <!-- Each transition: update this field and commit the plan file. -->
 _Source:_ #22
-_PR:_ #<pr-number>
-<!-- filled in after first push; omit until then                 -->
+_PR:_ #25
 
 ---
 
