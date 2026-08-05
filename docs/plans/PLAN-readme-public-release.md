@@ -370,9 +370,9 @@ easy to lose once the template is filled in:
       — 3 FIX REQUIRED findings, all fixed in task 13; second pass clean.
       1 LOW deferred, rationale below.
 - [x] Update `README.md` if affected — **N/A: `README.md` is the deliverable.**
-- [ ] Convert draft PR to ready-for-review; add `Closes #24` to PR description;
+- [x] Convert draft PR to ready-for-review; add `Closes #24` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 24 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
