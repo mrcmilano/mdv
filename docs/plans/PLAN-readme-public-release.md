@@ -269,7 +269,10 @@ easy to lose once the template is filled in:
       list, and does not claim it was closed.
       - Do not add dependencies beyond the three named in `AGENTS.md` /
         the build plan without discussing first.
-- [ ] 9. File three follow-up issues, no milestone (milestones are human-only per
+- [x] 9. File three follow-up issues — filed as #27 (screenshot/asciicast,
+      `documentation`), #28 (crates.io, `enhancement`), #29 (MSRV,
+      `enhancement`). No milestone, no `agent` label on any of them.
+      File three follow-up issues, no milestone (milestones are human-only per
       AGENTS.md §5) and **no `agent` label** — assigning work to the agent is the
       maintainer's call. Each references #24:
       - "Add a screenshot or asciicast to the README" — label `documentation`.
