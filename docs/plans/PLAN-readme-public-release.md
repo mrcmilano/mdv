@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-24-readme-public-release`
 _Date:_ 2026-08-04
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #24
 _PR:_ #26
 
