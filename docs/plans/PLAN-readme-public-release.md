@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-24-readme-public-release`
 _Date:_ 2026-08-04
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #24
 _PR:_ #26
 
@@ -161,8 +161,8 @@ easy to lose once the template is filled in:
 
 ### Implementation
 
-- [ ] 0. Create branch `chore/issue-24-readme-public-release` from develop following docs/git-workflow.md
-- [ ] 1. Remove the `> **Status:** Phases 1–5 are implemented — …` blockquote from
+- [x] 0. Create branch `chore/issue-24-readme-public-release` from develop following docs/git-workflow.md
+- [x] 1. Remove the `> **Status:** Phases 1–5 are implemented — …` blockquote from
       `README.md` in full. **Remove that blockquote and nothing else in this
       task** — the two intro paragraphs above it (`A lean, read-only…` and
       ``mdv` opens a Markdown file…`) stay verbatim; they already carry both what
