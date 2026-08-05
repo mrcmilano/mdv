@@ -8,21 +8,41 @@ A lean, read-only, interactive terminal Markdown viewer, written in Rust.
 `mdv` opens a Markdown file and lets you scroll through it in your terminal —
 no editor, no browser. It never writes to the file it opens.
 
-> **Status:** Phases 1–5 are implemented — CLI parsing, terminal lifecycle,
-> rendering of headings, paragraphs, emphasis/strong/strikethrough, inline
-> code, links, images, horizontal rules, hard/soft breaks, code blocks,
-> blockquotes (nested), ordered/unordered/task lists (nested), raw HTML
-> passthrough, footnotes, and box-drawing tables (alignment, in-cell
-> wrapping), with resize-triggered re-layout, plus incremental search with
-> match highlighting, a TOC overlay, and the status bar. Phase 6 (optional
-> syntax highlighting) is out of scope for v1; see `docs/mdv-build-plan.md`
-> for the full spec and phase breakdown.
+## Features
 
-## Build
+- Headings, paragraphs, and inline formatting — bold, italic, strikethrough,
+  inline code, links, and image placeholders.
+- Fenced and indented code blocks, set off by a gutter, labelled with the
+  language when the fence declares one.
+- Nested blockquotes, and nested ordered, unordered, and task lists.
+- Box-drawing tables with per-column alignment and in-cell wrapping.
+- Footnotes collected at the end of the document, and raw HTML printed
+  verbatim rather than interpreted.
+- Text search: `/` opens the prompt, Enter runs the query, every match on
+  screen is highlighted, and `n` / `N` cycle through them. Matching is
+  case-insensitive.
+- A table-of-contents overlay (`t`) to jump to any heading.
+- Re-wraps the document to the new width when the terminal is resized.
+
+## Install
+
+There are no published binaries yet — `mdv` is built from source, so you need a
+Rust toolchain ([rustup](https://rustup.rs)).
 
 ```bash
-cargo build --release
+git clone https://github.com/mrcmilano/mdv.git
+cd mdv
+cargo install --locked --path .
 ```
+
+That puts `mdv` on your `PATH`. If you only want the binary, build it instead
+and pick it up from `target/release/` (`mdv`, or `mdv.exe` on Windows):
+
+```bash
+cargo build --locked --release
+```
+
+Tested on Linux, macOS, and Windows — CI runs the test suite on all three.
 
 ## Usage
 
@@ -51,10 +71,18 @@ mdv --version | -V
 `SearchInput` and `Toc` modes override these keys — see
 `docs/mdv-build-plan.md` Section 6 for the full interaction model.
 
+## Known issues
+
+- Fenced code blocks tagged with the `text` language have been reported as not
+  rendering as expected —
+  [#14](https://github.com/mrcmilano/mdv/issues/14).
+
+Anything else you run into is worth reporting on the
+[issue tracker](https://github.com/mrcmilano/mdv/issues).
+
 ## Development
 
-See `AGENTS.md` for the required workflow (Assess → Plan → Branch →
-Implement → Finish) and `docs/mdv-build-plan.md` for the full specification.
+Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 cargo build                   # debug build
@@ -62,3 +90,7 @@ cargo test                    # all tests
 cargo clippy -- -D warnings   # must be clean
 cargo fmt                     # format
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
