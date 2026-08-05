@@ -292,7 +292,7 @@ easy to lose once the template is filled in:
 
 ### Verification
 
-- [ ] 10. Verify every command the README now claims actually works — run them
+- [x] 10. Verify every command the README now claims actually works — run them
       **exactly as written in the README, `--locked` included**, since the point
       is to verify the visitor's experience, not an approximation of it. Run
       `cargo build --locked --release`, then install to a throwaway root so the
@@ -302,7 +302,7 @@ easy to lose once the template is filled in:
       `~/.cargo/bin`. Confirm `"$SCRATCH"/bin/mdv --version` runs and prints the
       version. If `--locked` fails, `Cargo.lock` is stale against `Cargo.toml` —
       stop and report rather than dropping the flag to make it pass.
-- [ ] 11. Dogfood, using the binary from task 10: view `README.md` and
+- [x] 11. Dogfood, using the binary from task 10: view `README.md` and
       `CONTRIBUTING.md` in mdv and confirm both render sanely — headings, the
       keybindings table, the new Features bullets, and the fenced blocks. This is
       the one rendering check that matters for a doc whose whole job is to be
@@ -319,7 +319,22 @@ easy to lose once the template is filled in:
       prevent.
       If a rendering defect *is* observed, file it as a new issue rather than
       fixing it here (out of scope).
-- [ ] 12. Re-read the final `README.md` end to end against #24's checklist: no
+      **This task was actually completed — how, for the review record.** Bare
+      `script -q /dev/null …` did behave as this note predicts (a 66-byte
+      capture: alternate-buffer enter/exit plus a status-bar fragment, no
+      document body — the pty has no window size, so the viewport is empty).
+      What worked instead was a PTY with an explicit size: `pty.fork()`, then
+      `TIOCSWINSZ` to 100x45 on the child's slave fd before `execv`, driving
+      the viewer with keystrokes and turning each `ESC[row;colH` back into a
+      newline on the way out (mdv paints one line per `MoveTo`). Harness kept
+      at `scratchpad/ptyrun.py`.
+      **Observed, both files, no defects:** H1 uppercased with a `═` underline
+      and H2 with `─`; Features bullets wrapping with hanging indent; fenced
+      blocks in the dim `│` gutter with their `(bash)` language label; the
+      keybindings table drawn with `┌┬┐├┼┤└┴┘`, columns aligned, arrow glyphs
+      and long cells intact; links rendered as `text (url)`; status bar
+      showing `100% · 55/98`. `CONTRIBUTING.md` likewise.
+- [x] 12. Re-read the final `README.md` end to end against #24's checklist: no
       phase numbers, no "v1", no build-plan-as-status framing, no `AGENTS.md`
       link, no CommonMark-coverage claim, no unverified claims. Confirm section
       order reads: badges → intro → Features → Install → Usage → Keybindings →
