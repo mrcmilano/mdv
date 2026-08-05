@@ -226,7 +226,7 @@ easy to lose once the template is filled in:
 - [x] 6. Add a `## License` section as the **last section of the file**, below
       `## Development`: one line, MIT, linking the existing `LICENSE` file.
       No badge.
-- [ ] 7. Rewrite `## Development` so its **entire** final content is: the four
+- [x] 7. Rewrite `## Development` so its **entire** final content is: the four
       cargo commands already there (`cargo build`, `cargo test`,
       `cargo clippy -- -D warnings`, `cargo fmt`) in their existing fenced block,
       preceded by one line pointing anyone who wants to contribute at

@@ -82,8 +82,7 @@ Anything else you run into is worth reporting on the
 
 ## Development
 
-See `AGENTS.md` for the required workflow (Assess → Plan → Branch →
-Implement → Finish) and `docs/mdv-build-plan.md` for the full specification.
+Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 cargo build                   # debug build
