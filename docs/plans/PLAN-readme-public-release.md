@@ -239,7 +239,7 @@ easy to lose once the template is filled in:
       public spec document and #24 raised no objection to it. `AGENTS.md` must
       not be linked from `README.md` at all once this task is done; verify with
       `grep -n 'AGENTS' README.md` returning nothing.
-- [ ] 8. Create `CONTRIBUTING.md` at repo root, sized to a solo-maintained hobby
+- [x] 8. Create `CONTRIBUTING.md` at repo root, sized to a solo-maintained hobby
       project — no code of conduct, no governance model, no contributor ladder.
       Content, per #24's Decisions:
       - Expectation-setting: solo-maintained hobby project, no SLA on review
@@ -260,6 +260,13 @@ easy to lose once the template is filled in:
         build plan's non-goals as plain text — `docs/mdv-build-plan.md`
         Section 1, "Goals and non-goals" — again with no `#anchor`. Precedent:
         #13 (Mermaid) declined as out of scope.
+      **Correction to this task's wording, recorded for the review record:**
+      #13 is **open** with a `skip` label, not closed — checked at
+      implementation time. Its declining comment gives the grounds as cost
+      (a flowchart layout engine is more machinery than a lean viewer should
+      carry), not membership of the build plan's non-goals list. `CONTRIBUTING.md`
+      therefore cites it as a size/scope precedent distinct from the non-goals
+      list, and does not claim it was closed.
       - Do not add dependencies beyond the three named in `AGENTS.md` /
         the build plan without discussing first.
 - [ ] 9. File three follow-up issues, no milestone (milestones are human-only per
