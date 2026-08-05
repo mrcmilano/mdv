@@ -208,7 +208,7 @@ easy to lose once the template is filled in:
       transitive crate's toolchain requirement. CI already runs
       `cargo test --locked` / `cargo clippy --locked`; the README must match what
       CI actually verifies.
-- [ ] 4. Add a one-line platform statement to the Install section. **Read
+- [x] 4. Add a one-line platform statement to the Install section. **Read
       `.github/workflows/ci.yml` first** and name exactly the operating systems
       its matrix runs — do not copy "Linux, macOS, and Windows" from #24 without
       confirming. Phrase it as **"Tested on …"**, not "Supports …": CI proves the

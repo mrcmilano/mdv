@@ -41,6 +41,9 @@ and pick it up from `target/release/mdv`:
 cargo build --locked --release
 ```
 
+Tested on Linux, macOS, and Windows — every push runs the test suite on all
+three in CI.
+
 ## Usage
 
 ```
