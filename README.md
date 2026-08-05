@@ -23,10 +23,22 @@ no editor, no browser. It never writes to the file it opens.
 - A table-of-contents overlay (`t`) to jump to any heading.
 - Re-wraps the document to the new width when the terminal is resized.
 
-## Build
+## Install
+
+There are no published binaries yet — `mdv` is built from source, so you need a
+Rust toolchain ([rustup](https://rustup.rs)).
 
 ```bash
-cargo build --release
+git clone https://github.com/mrcmilano/mdv.git
+cd mdv
+cargo install --locked --path .
+```
+
+That puts `mdv` on your `PATH`. If you only want the binary, build it instead
+and pick it up from `target/release/mdv`:
+
+```bash
+cargo build --locked --release
 ```
 
 ## Usage

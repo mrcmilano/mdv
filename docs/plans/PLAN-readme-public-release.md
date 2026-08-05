@@ -194,7 +194,7 @@ easy to lose once the template is filled in:
       Enter — nothing is matched or highlighted per keystroke. The blockquote's
       "incremental" was inaccurate; written as what it actually does instead,
       per this task's own instruction to verify each claim before writing it.
-- [ ] 3. Replace `## Build` with `## Install`, directly above `## Usage`. State
+- [x] 3. Replace `## Build` with `## Install`, directly above `## Usage`. State
       that there are no published binaries yet and mdv is built from source
       (Rust toolchain required). Give the full sequence a visitor can paste —
       `git clone https://github.com/mrcmilano/mdv.git`, `cd mdv`, then
