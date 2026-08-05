@@ -170,7 +170,7 @@ easy to lose once the template is filled in:
       blockquote carried is re-added as its own section in task 2, so this task
       leaves the README temporarily thinner — that is expected, not a gap to
       patch here.
-- [ ] 2. Add a `## Features` section between the intro and the build/install
+- [x] 2. Add a `## Features` section between the intro and the build/install
       section (still titled `## Build` at this point — task 3 renames it), carrying
       the capability inventory that task 1 removed, rewritten as capabilities
       rather than build history. Source the list from the deleted blockquote and
@@ -185,6 +185,15 @@ easy to lose once the template is filled in:
       coverage** — the Known issues section (task 5) exists precisely because
       that claim would be false. Describe what it does, not how much of a spec
       it covers.
+      **Deviation from this task's suggested wording, recorded for the review
+      record:** the bullet list does **not** call the search "incremental".
+      Verification against `src/view.rs` (`start_search` / `search_push_char` /
+      `execute_search`), `src/input.rs` (`KeyCode::Enter => Action::SearchExecute`)
+      and build plan Section 6 "Search semantics" ("On Enter: collect matching
+      line indices") shows the query is buffered while typing and only runs on
+      Enter — nothing is matched or highlighted per keystroke. The blockquote's
+      "incremental" was inaccurate; written as what it actually does instead,
+      per this task's own instruction to verify each claim before writing it.
 - [ ] 3. Replace `## Build` with `## Install`, directly above `## Usage`. State
       that there are no published binaries yet and mdv is built from source
       (Rust toolchain required). Give the full sequence a visitor can paste —

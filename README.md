@@ -8,6 +8,21 @@ A lean, read-only, interactive terminal Markdown viewer, written in Rust.
 `mdv` opens a Markdown file and lets you scroll through it in your terminal —
 no editor, no browser. It never writes to the file it opens.
 
+## Features
+
+- Headings, paragraphs, and inline formatting — bold, italic, strikethrough,
+  inline code, links, and image placeholders.
+- Fenced and indented code blocks, shown in a gutter with the language name.
+- Nested blockquotes, and nested ordered, unordered, and task lists.
+- Box-drawing tables with per-column alignment and in-cell wrapping.
+- Footnotes collected at the end of the document, and raw HTML printed
+  verbatim rather than interpreted.
+- Text search: `/` opens the prompt, Enter runs the query, every match on
+  screen is highlighted, and `n` / `N` cycle through them. Matching is
+  case-insensitive.
+- A table-of-contents overlay (`t`) to jump to any heading.
+- Re-wraps the document to the new width when the terminal is resized.
+
 ## Build
 
 ```bash
