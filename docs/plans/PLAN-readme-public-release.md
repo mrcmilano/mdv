@@ -213,7 +213,7 @@ easy to lose once the template is filled in:
       its matrix runs — do not copy "Linux, macOS, and Windows" from #24 without
       confirming. Phrase it as **"Tested on …"**, not "Supports …": CI proves the
       former, and nothing in the repo backs the latter.
-- [ ] 5. Add a short `## Known issues` section after `## Keybindings`. **Run
+- [x] 5. Add a short `## Known issues` section after `## Keybindings`. **Run
       `gh issue list --state open --label bug` first** and list only what is
       still open at that moment; today that is #14 alone (#22 closed in
       `14faaa4`). Describe #14 as a reported issue with `text`-language fenced

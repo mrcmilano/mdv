@@ -71,6 +71,15 @@ mdv --version | -V
 `SearchInput` and `Toc` modes override these keys — see
 `docs/mdv-build-plan.md` Section 6 for the full interaction model.
 
+## Known issues
+
+- Fenced code blocks tagged with the `text` language have been reported as not
+  rendering as expected —
+  [#14](https://github.com/mrcmilano/mdv/issues/14).
+
+Anything else you run into is worth reporting on the
+[issue tracker](https://github.com/mrcmilano/mdv/issues).
+
 ## Development
 
 See `AGENTS.md` for the required workflow (Assess → Plan → Branch →
