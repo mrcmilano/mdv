@@ -4,6 +4,7 @@ _Branch:_ `chore/issue-24-readme-public-release`
 _Date:_ 2026-08-04
 _Status:_ APPROVED
 _Source:_ #24
+_PR:_ #26
 
 ---
 
