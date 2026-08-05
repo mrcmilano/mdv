@@ -12,7 +12,8 @@ no editor, no browser. It never writes to the file it opens.
 
 - Headings, paragraphs, and inline formatting — bold, italic, strikethrough,
   inline code, links, and image placeholders.
-- Fenced and indented code blocks, shown in a gutter with the language name.
+- Fenced and indented code blocks, set off by a gutter, labelled with the
+  language when the fence declares one.
 - Nested blockquotes, and nested ordered, unordered, and task lists.
 - Box-drawing tables with per-column alignment and in-cell wrapping.
 - Footnotes collected at the end of the document, and raw HTML printed
@@ -35,14 +36,13 @@ cargo install --locked --path .
 ```
 
 That puts `mdv` on your `PATH`. If you only want the binary, build it instead
-and pick it up from `target/release/mdv`:
+and pick it up from `target/release/` (`mdv`, or `mdv.exe` on Windows):
 
 ```bash
 cargo build --locked --release
 ```
 
-Tested on Linux, macOS, and Windows — every push runs the test suite on all
-three in CI.
+Tested on Linux, macOS, and Windows — CI runs the test suite on all three.
 
 ## Usage
 

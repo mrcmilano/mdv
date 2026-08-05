@@ -339,18 +339,50 @@ easy to lose once the template is filled in:
       link, no CommonMark-coverage claim, no unverified claims. Confirm section
       order reads: badges → intro → Features → Install → Usage → Keybindings →
       Known issues → Development → License.
+- [x] 13. **Added by `/skill:adversarial-review` (FIX REQUIRED, per AGENTS.md §4).**
+      Three accuracy defects, all in `README.md`, all of the exact class #24
+      exists to remove:
+      - **Install section, platform line.** "every push runs the test suite on
+        all three in CI" is false — `.github/workflows/ci.yml` triggers only on
+        `push: branches: [main, develop]` and `pull_request` targeting those, so
+        a push to a feature branch runs nothing. Reduced to "CI runs the test
+        suite on all three", which is what the workflow actually backs.
+      - **Install section, binary path.** `target/release/mdv` does not exist on
+        Windows (`target\release\mdv.exe`) — and the very next line claims
+        Windows is tested. Reworded to name the directory and both filenames.
+      - **Features, code blocks bullet.** "Fenced and indented code blocks,
+        shown in a gutter with the language name" — an indented code block never
+        carries a language (`render.rs`, test `indented_code_block_has_no_language`);
+        the `(lang)` label is emitted only when a fence declares one. Reworded so
+        the label is conditional.
 
 ### Finish
 
-- [ ] Write / update tests for all implementation tasks above
+- [x] Write / update tests for all implementation tasks above
       — **N/A: documentation-only change, no code touched.** Recorded here
       rather than silently skipped; tasks 10–12 are the substitute verification.
-- [ ] Run full test suite — all tests pass (baseline confirmation only)
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Run full test suite — all tests pass (baseline confirmation only)
+      — 173 passed, 0 failed, both before task 1 and after task 13.
+      `cargo fmt --check` and `cargo clippy --locked -- -D warnings` also clean.
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected — **N/A: `README.md` is the deliverable.**
+      — 3 FIX REQUIRED findings, all fixed in task 13; second pass clean.
+      1 LOW deferred, rationale below.
+- [x] Update `README.md` if affected — **N/A: `README.md` is the deliverable.**
 - [ ] Convert draft PR to ready-for-review; add `Closes #24` to PR description;
       set this plan's `_Status:_` to `READY`
 - [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 24 --remove-label agent --remove-label "in progress" --add-label needs-review`
+
+---
+
+## Deferred findings
+
+- **LOW — `README.md` Install: "That puts `mdv` on your `PATH`."** Only true if
+  `~/.cargo/bin` is on the reader's `PATH`. Deferred rather than hedged: the
+  sentence two paragraphs above sends the reader to rustup, which puts
+  `~/.cargo/bin` on `PATH` as part of its own install, so the assumption holds
+  for the path this README actually documents. A caveat here would cost more
+  clarity than the residual risk is worth. `cargo install` prints an explicit
+  warning naming the directory in the case where it does not hold.
