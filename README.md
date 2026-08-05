@@ -91,3 +91,7 @@ cargo test                    # all tests
 cargo clippy -- -D warnings   # must be clean
 cargo fmt                     # format
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

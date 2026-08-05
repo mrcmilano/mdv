@@ -223,7 +223,7 @@ easy to lose once the template is filled in:
       **If that command returns nothing** (i.e. #14 has closed too), keep the
       section and reduce it to the tracker pointer alone — do not drop it and do
       not invent a limitation to fill it.
-- [ ] 6. Add a `## License` section as the **last section of the file**, below
+- [x] 6. Add a `## License` section as the **last section of the file**, below
       `## Development`: one line, MIT, linking the existing `LICENSE` file.
       No badge.
 - [ ] 7. Rewrite `## Development` so its **entire** final content is: the four
