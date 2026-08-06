@@ -2,8 +2,9 @@
 
 _Branch:_ `chore/issue-20-public-release-readiness`
 _Date:_ 2026-08-05
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #20
+_PR:_ #31
 
 ---
 
@@ -221,7 +222,7 @@ once the template is filled in:
       would branch off the wrong base. Confirm with `git branch --show-current`
       → `develop` before creating the branch. This plan file is untracked and
       survives the checkout.
-- [ ] 1. Fix the two `clippy::bool_assert_comparison` warnings in `src/layout.rs`
+- [x] 1. Fix the two `clippy::bool_assert_comparison` warnings in `src/layout.rs`
       — lines 1048 and 1066, both `assert_eq!(result.lines[0].spans[0].style.bold, true)`
       → `assert!(result.lines[0].spans[0].style.bold)`. These are the deferred LOW
       finding from `docs/plans/PLAN-phase3-structural-blocks.md`; that plan's
