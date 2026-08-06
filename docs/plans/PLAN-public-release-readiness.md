@@ -378,10 +378,10 @@ once the template is filled in:
       `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings`,
       `cargo test --locked`. All three clean, test count unchanged from the
       task-1 baseline.
-- [ ] 7. Confirm the draft PR's CI is green **on all three OSes** — this is the
+- [x] 7. Confirm the draft PR's CI is green **on all three OSes** — this is the
       only place the widened clippy scope is actually proven on Windows and
       Linux. `gh pr checks <pr>`. A local-only pass does not close task 2.
-- [ ] 8. Re-read the changed docs end to end for accuracy: `AGENTS.md`'s banner
+- [x] 8. Re-read the changed docs end to end for accuracy: `AGENTS.md`'s banner
       and divider read as *describing* the two audiences rather than changing any
       rule; no doc still names `docs/api-error-handling.md`; and the clippy
       command is identical across **all 6 sites from task 3** plus
