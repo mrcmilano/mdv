@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-20-public-release-readiness`
 _Date:_ 2026-08-05
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #20
 _PR:_ #31
 
@@ -390,22 +390,29 @@ once the template is filled in:
 
 ### Finish
 
-- [ ] Write / update tests for all implementation tasks above
+- [x] Write / update tests for all implementation tasks above
       — expected **N/A**: task 1 rewrites two existing assertions without
       changing what they assert, and tasks 2–5 touch CI config and docs only.
       Record it here explicitly rather than skipping it silently.
-- [ ] Run full test suite — all tests pass
-- [ ] `cargo audit` — expected **N/A**: `AGENTS.md` requires it after the first
+- [x] Run full test suite — all tests pass
+- [x] `cargo audit` — expected **N/A**: `AGENTS.md` requires it after the first
       build and after any `cargo update`, and this plan changes no dependency and
       does not touch `Cargo.toml` or `Cargo.lock`. Stated rather than skipped
       silently. If `Cargo.lock` did change for any reason, run it and treat any
       advisory as a failure.
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
-      (FIX REQUIRED: add tasks to Implementation above and complete them;
-       LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected — task 3 already does; confirm nothing else
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+      **Verdict: PASS** (2026-08-06). All five attack vectors clean; no FIX
+      REQUIRED and no LOW findings, so no Deferred findings section is needed.
+      The review re-tested the plan's own assumptions rather than trusting
+      them: the deleted doc's reference check was re-run across *all* file
+      types (the plan's grep covered only `*.md`/`*.yml`/`*.rs`) and found
+      nothing outside `docs/plans/`; `--all-targets` was confirmed to add
+      exactly one target (no `benches/`, no `examples/`, no extra targets in
+      `Cargo.toml`); and no test fixture reads the reformatted docs, so the
+      fenced-block realignment cannot move the corpus snapshot.
+- [x] Update `README.md` if affected — task 3 already does; confirm nothing else
       in it went stale.
-- [ ] Convert draft PR to ready-for-review; set this plan's `_Status:_` to `READY`.
+- [x] Convert draft PR to ready-for-review; set this plan's `_Status:_` to `READY`.
       **Do not add `Closes #20` to this PR** — see the Release section. #20 is
       not finished when this PR merges; the promotion and the visibility flip
       are still outstanding, and auto-closing it here would lose them.
@@ -414,7 +421,7 @@ once the template is filled in:
       still unchecked — those are tracked on #20, which stays open until R4.
       Do not withhold `READY` waiting for the release steps, and do not invent a
       status beyond it.
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 20 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
