@@ -29,8 +29,8 @@ README never needs to link to `AGENTS.md` directly.
 ## Out of scope
 
 - **Everything tracked in #20** — repo visibility flip, `main`/`develop` branch
-  state, CI clippy `--all-targets`, removal of `docs/api-error-handling.md`, and
-  the `AGENTS.md` universal/maintainer-specific split. This plan has no
+  state, CI clippy `--all-targets`, removal of the obsolete API error-handling
+  doc, and the `AGENTS.md` universal/maintainer-specific split. This plan has no
   execution-order dependency on #20 (see Impact assessment).
 - **Publishing to crates.io.** `cargo install --path .` is the install path this
   plan ships. Reserving the crate name, publishing, and setting a version policy

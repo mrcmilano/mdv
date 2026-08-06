@@ -371,6 +371,16 @@ once the template is filled in:
       **Also confirm `git status` shows `docs/session-retrospective-phase3-phase4.html`
       still untracked** — it stays that way by deliberate choice per #20, and a
       `git add docs/` in this task is the one plausible way it gets swept in.
+      **What the re-run turned up (2026-08-06):** one hit outside `AGENTS.md` and
+      this plan — `PLAN-readme-public-release.md:32`, an *Out of scope* bullet
+      enumerating #20's contents. Handled here per the instruction above, but
+      **de-pathed rather than deleted**: the item now reads "removal of the
+      obsolete API error-handling doc". Removing the item outright would have
+      made that plan's record of #20's scope *less* accurate, while leaving the
+      path would have left a name resolving to nothing. De-pathing keeps the
+      historical statement true and clears the dead path. The mentions inside
+      *this* plan are left in full — deleting a file is this plan's subject, and
+      task 5's own text names it.
 
 ### Verification
 
