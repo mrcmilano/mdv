@@ -235,7 +235,7 @@ once the template is filled in:
       after and confirm the pass count is identical. `assert_eq!(x, true)` and
       `assert!(x)` differ only in the failure message, so any change in count or
       outcome means something else was touched.
-- [ ] 2. Switch the CI clippy job to `--all-targets`:
+- [x] 2. Switch the CI clippy job to `--all-targets`:
       `.github/workflows/ci.yml`, clippy job, `cargo clippy --locked -- -D warnings`
       → `cargo clippy --all-targets --locked -- -D warnings`. Keep `--locked`
       (it is what makes CI reproduce the committed `Cargo.lock`) and keep the
