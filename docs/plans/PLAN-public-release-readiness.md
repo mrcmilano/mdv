@@ -348,7 +348,7 @@ once the template is filled in:
       **Verify by diff:** `git diff AGENTS.md` for this task must show additions
       only — no deletions inside the `## Workflow` block. Any deletion there
       means the task overreached.
-- [ ] 5. Delete `docs/api-error-handling.md` and remove its one inbound
+- [x] 5. Delete `docs/api-error-handling.md` and remove its one inbound
       reference in the **same commit**, so no state exists where `AGENTS.md`
       points at a file that isn't there. The reference is the **first bullet of
       `## Domain Specific Rules`**, `AGENTS.md:284–285`. **Exact edit:**

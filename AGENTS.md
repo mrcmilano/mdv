@@ -294,8 +294,8 @@ boundaries change during implementation.
 
 ## Domain Specific Rules
 
-- This is a single Rust binary crate — there are no frontend/backend layers,
-  no API contracts, and no `docs/api-error-handling.md` applicability.
+- This is a single Rust binary crate — there are no frontend/backend layers
+  and no API contracts.
 - `docs/mdv-build-plan.md` is the complete specification. Its build phases
   (Section 9) must be implemented strictly in order; do not start a later
   phase before the current one's acceptance criteria pass.
