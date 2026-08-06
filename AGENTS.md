@@ -19,13 +19,13 @@ cargo fetch
 ## Commands
 
 ```bash
-cargo build                           # debug build
-cargo build --release                 # release build (lto + strip, see Cargo.toml)
-cargo test                            # all tests
-cargo test [test_name]                # single test
-cargo clippy -- -D warnings           # must be clean after every phase
-cargo fmt                             # format
-cargo audit                           # run after first build and after any cargo update
+cargo build                                # debug build
+cargo build --release                      # release build (lto + strip, see Cargo.toml)
+cargo test                                 # all tests
+cargo test [test_name]                     # single test
+cargo clippy --all-targets -- -D warnings  # must be clean after every phase
+cargo fmt                                  # format
+cargo audit                                # run after first build and after any cargo update
 ```
 
 ---
@@ -44,8 +44,8 @@ out. No plan file, no new branch, no PR required. Use a clear commit message
 describing the change.
 
 A trivial change that touches any code file (e.g. a one-line Rust fix) must
-still pass `cargo fmt --check` and `cargo clippy -- -D warnings` before
-committing. Only non-code changes (`.md` wording, comments, docs) skip checks
+still pass `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
+before committing. Only non-code changes (`.md` wording, comments, docs) skip checks
 entirely. The full test loop (§3) is not required for trivial changes.
 
 For **non-trivial** work:
@@ -266,7 +266,8 @@ Confirm branch presence with: `git branch -a | grep <branch-name-from-plan-heade
   layout is fixed by `docs/mdv-build-plan.md` Section 4 (`main.rs`, `render.rs`,
   `layout.rs`, `view.rs`, `input.rs`, `style.rs`); do not add new top-level
   modules without updating that section first.
-- Idiomatic Rust: run `cargo fmt`; `cargo clippy -- -D warnings` must be clean.
+- Idiomatic Rust: run `cargo fmt`; `cargo clippy --all-targets -- -D warnings`
+  must be clean.
 - **Do not add dependencies beyond the 3 named in the build plan** (`pulldown-cmark`,
   `crossterm`, `unicode-width`) without stopping to ask — this is a hard
   constraint of the project (`mdv-build-plan.md` Section 2), not a general guideline.

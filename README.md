@@ -85,10 +85,10 @@ Anything else you run into is worth reporting on the
 Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
-cargo build                   # debug build
-cargo test                    # all tests
-cargo clippy -- -D warnings   # must be clean
-cargo fmt                     # format
+cargo build                                # debug build
+cargo test                                 # all tests
+cargo clippy --all-targets -- -D warnings  # must be clean
+cargo fmt                                  # format
 ```
 
 ## License

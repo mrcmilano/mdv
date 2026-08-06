@@ -16,7 +16,7 @@ Target `develop`, not `main`. Before opening a PR, make sure these pass:
 
 ```bash
 cargo fmt --check
-cargo clippy -- -D warnings
+cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 

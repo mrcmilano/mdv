@@ -256,7 +256,7 @@ once the template is filled in:
       do not tack the fix onto an unrelated task's commit.
       Leave the `fmt`, `test` and `audit` jobs untouched; `cargo fmt --check`
       already covers all targets.
-- [ ] 3. Bring the *documented* clippy command into line with what CI now runs.
+- [x] 3. Bring the *documented* clippy command into line with what CI now runs.
       Otherwise a change passes locally and fails CI — precisely the trap
       `CONTRIBUTING.md` already warns about for `Cargo.lock`.
       **All 6 sites, enumerated** (verified 2026-08-05; line numbers may drift,
