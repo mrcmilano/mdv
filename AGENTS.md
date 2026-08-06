@@ -5,6 +5,12 @@
 > **PROJECT:** `mdv` — a lean, read-only, interactive terminal Markdown viewer.
 > **STACK:** Rust (single binary crate). Full spec: `docs/mdv-build-plan.md`.
 
+> **Audience:** Everything in this file applies to anyone working on
+> `mdv` — **except `## Workflow (required)` (§1–§5)**, which is the
+> maintainer's own process (plan files, GitHub label state machine,
+> review ritual) and is not expected of outside contributions.
+> Contributing from outside? Start with `CONTRIBUTING.md`.
+
 ---
 
 ## Setup
@@ -31,6 +37,12 @@ cargo audit                                # run after first build and after any
 ---
 
 ## Workflow (required)
+
+> **This section is the maintainer's process.** It is how the maintainer
+> — and any agent working on their behalf — runs changes in this repo,
+> and it is required in that context. An external contributor does not
+> need to write a plan file, follow the branch naming, or touch issue
+> labels; see `CONTRIBUTING.md` for what an outside PR actually needs.
 
 ### 1. Development phases
 

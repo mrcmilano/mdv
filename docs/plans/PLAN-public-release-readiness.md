@@ -298,7 +298,7 @@ once the template is filled in:
       ```
       Every surviving hit must read `--all-targets`, and only
       `.github/workflows/ci.yml` additionally carries `--locked` (task 2).
-- [ ] 4. Mark `AGENTS.md`'s two audiences **in place**. Two insertions, no moves,
+- [x] 4. Mark `AGENTS.md`'s two audiences **in place**. Two insertions, no moves,
       no renumbering, no rule text touched. **Exact wording is given below** so
       the maintainer approves the actual words at plan-review time rather than
       the agent inventing them; adjust only for typos or house style.
