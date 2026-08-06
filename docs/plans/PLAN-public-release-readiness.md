@@ -374,7 +374,7 @@ once the template is filled in:
 
 ### Verification
 
-- [ ] 6. Run the full local gate exactly as CI now defines it:
+- [x] 6. Run the full local gate exactly as CI now defines it:
       `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings`,
       `cargo test --locked`. All three clean, test count unchanged from the
       task-1 baseline.
