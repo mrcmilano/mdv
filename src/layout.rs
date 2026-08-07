@@ -1045,7 +1045,7 @@ mod tests {
         let result = wrap(&doc, 80);
         assert_eq!(result.lines.len(), 2);
         assert_eq!(result.lines[0].spans[0].text, "HI");
-        assert_eq!(result.lines[0].spans[0].style.bold, true);
+        assert!(result.lines[0].spans[0].style.bold);
         assert_eq!(result.lines[0].spans[0].style.fg, Some(style::HEADING));
         assert_eq!(result.lines[1].spans[0].text, "══");
     }
@@ -1063,7 +1063,7 @@ mod tests {
         let doc = build_document("### hi");
         let result = wrap(&doc, 80);
         assert_eq!(result.lines.len(), 1);
-        assert_eq!(result.lines[0].spans[0].style.bold, true);
+        assert!(result.lines[0].spans[0].style.bold);
         assert_eq!(result.lines[0].spans[0].style.fg, Some(style::HEADING));
     }
 

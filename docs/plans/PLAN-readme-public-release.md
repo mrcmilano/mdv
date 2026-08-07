@@ -29,8 +29,8 @@ README never needs to link to `AGENTS.md` directly.
 ## Out of scope
 
 - **Everything tracked in #20** — repo visibility flip, `main`/`develop` branch
-  state, CI clippy `--all-targets`, removal of `docs/api-error-handling.md`, and
-  the `AGENTS.md` universal/maintainer-specific split. This plan has no
+  state, CI clippy `--all-targets`, removal of the obsolete API error-handling
+  doc, and the `AGENTS.md` universal/maintainer-specific split. This plan has no
   execution-order dependency on #20 (see Impact assessment).
 - **Publishing to crates.io.** `cargo install --path .` is the install path this
   plan ships. Reserving the crate name, publishing, and setting a version policy
@@ -82,13 +82,12 @@ No code, no tests, no dependency changes. `cargo test` / `cargo clippy` results
 are unaffected by construction, but the baseline is still confirmed in the
 Finish checklist.
 
-**Branch base — needs care.** The worktree this plan was written in
-(`/Users/marco/orca/workspaces/mdv/remove-dev-wording-from-readme`) is currently
-on branch `mrcmilano/remove-dev-wording-from-readme`, which sits on the `init`
-commit and contains **no `README.md` at all**. The new branch must be cut from
-`develop`, not from the current HEAD. Because `develop` is checked out in
-another worktree, git will refuse a plain `git checkout develop` here; use the
-start-point form, which does not check `develop` out:
+**Branch base — needs care.** The worktree this plan was written in is
+currently on branch `mrcmilano/remove-dev-wording-from-readme`, which sits on
+the `init` commit and contains **no `README.md` at all**. The new branch must be
+cut from `develop`, not from the current HEAD. Because `develop` is checked out
+in another worktree, git will refuse a plain `git checkout develop` here; use
+the start-point form, which does not check `develop` out:
 
 ```bash
 git fetch origin

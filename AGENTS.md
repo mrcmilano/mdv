@@ -5,6 +5,12 @@
 > **PROJECT:** `mdv` — a lean, read-only, interactive terminal Markdown viewer.
 > **STACK:** Rust (single binary crate). Full spec: `docs/mdv-build-plan.md`.
 
+> **Audience:** Everything in this file applies to anyone working on
+> `mdv` — **except `## Workflow (required)` (§1–§5)**, which is the
+> maintainer's own process (plan files, GitHub label state machine,
+> review ritual) and is not expected of outside contributions.
+> Contributing from outside? Start with `CONTRIBUTING.md`.
+
 ---
 
 ## Setup
@@ -19,18 +25,24 @@ cargo fetch
 ## Commands
 
 ```bash
-cargo build                           # debug build
-cargo build --release                 # release build (lto + strip, see Cargo.toml)
-cargo test                            # all tests
-cargo test [test_name]                # single test
-cargo clippy -- -D warnings           # must be clean after every phase
-cargo fmt                             # format
-cargo audit                           # run after first build and after any cargo update
+cargo build                                # debug build
+cargo build --release                      # release build (lto + strip, see Cargo.toml)
+cargo test                                 # all tests
+cargo test [test_name]                     # single test
+cargo clippy --all-targets -- -D warnings  # must be clean after every phase
+cargo fmt                                  # format
+cargo audit                                # run after first build and after any cargo update
 ```
 
 ---
 
 ## Workflow (required)
+
+> **This section is the maintainer's process.** It is how the maintainer
+> — and any agent working on their behalf — runs changes in this repo,
+> and it is required in that context. An external contributor does not
+> need to write a plan file, follow the branch naming, or touch issue
+> labels; see `CONTRIBUTING.md` for what an outside PR actually needs.
 
 ### 1. Development phases
 
@@ -44,8 +56,8 @@ out. No plan file, no new branch, no PR required. Use a clear commit message
 describing the change.
 
 A trivial change that touches any code file (e.g. a one-line Rust fix) must
-still pass `cargo fmt --check` and `cargo clippy -- -D warnings` before
-committing. Only non-code changes (`.md` wording, comments, docs) skip checks
+still pass `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
+before committing. Only non-code changes (`.md` wording, comments, docs) skip checks
 entirely. The full test loop (§3) is not required for trivial changes.
 
 For **non-trivial** work:
@@ -266,7 +278,8 @@ Confirm branch presence with: `git branch -a | grep <branch-name-from-plan-heade
   layout is fixed by `docs/mdv-build-plan.md` Section 4 (`main.rs`, `render.rs`,
   `layout.rs`, `view.rs`, `input.rs`, `style.rs`); do not add new top-level
   modules without updating that section first.
-- Idiomatic Rust: run `cargo fmt`; `cargo clippy -- -D warnings` must be clean.
+- Idiomatic Rust: run `cargo fmt`; `cargo clippy --all-targets -- -D warnings`
+  must be clean.
 - **Do not add dependencies beyond the 3 named in the build plan** (`pulldown-cmark`,
   `crossterm`, `unicode-width`) without stopping to ask — this is a hard
   constraint of the project (`mdv-build-plan.md` Section 2), not a general guideline.
@@ -281,8 +294,8 @@ boundaries change during implementation.
 
 ## Domain Specific Rules
 
-- This is a single Rust binary crate — there are no frontend/backend layers,
-  no API contracts, and no `docs/api-error-handling.md` applicability.
+- This is a single Rust binary crate — there are no frontend/backend layers
+  and no API contracts.
 - `docs/mdv-build-plan.md` is the complete specification. Its build phases
   (Section 9) must be implemented strictly in order; do not start a later
   phase before the current one's acceptance criteria pass.

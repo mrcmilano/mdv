@@ -308,7 +308,8 @@ One reversed-video row pinned to the bottom:
 ## 9. Build phases and acceptance criteria
 
 Work strictly in this order. After each phase, `cargo build` must succeed with no
-warnings (`cargo clippy -- -D warnings` clean) and the listed criteria must pass.
+warnings (`cargo clippy --all-targets -- -D warnings` clean) and the listed
+criteria must pass.
 
 **Phase 1 — Skeleton and terminal lifecycle.**
 CLI parsing, file loading, alternate screen + raw mode in/out, panic hook, event
