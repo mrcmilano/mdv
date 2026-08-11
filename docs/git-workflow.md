@@ -81,8 +81,13 @@ git commit -m "feat: add concise description of change"
 # 4. Push and open the PR targeting develop
 #    --base is required: the repo's default branch is main, not develop.
 #    Drop --draft on a trivial change — see Pull Requests > Opening.
+#    Always pass --body-file: without a body argument gh opens an editor,
+#    which blocks an autonomous agent, and the draft header block
+#    (AGENTS.md §2) would be missing.
 git push -u origin feature/my-change
-gh pr create --draft --base develop --title "Add concise description of change"
+gh pr create --draft --base develop \
+  --title "Add concise description of change" \
+  --body-file <scratch-file>
 ```
 
 ---
@@ -98,11 +103,12 @@ git rebase origin/develop
 
 Prefer rebase over merge to keep history linear.
 
-**Solo-workflow rule:** rebase freely while the PR is still a draft — there are
-no reviewers whose inline comments could be displaced, so the "do not rewrite
-history" guard below does not yet apply. Once the PR is converted to
-ready-for-review (or any reviewer leaves an inline comment), stop rewriting
-history and follow *Responding to Review Feedback*.
+**Solo-workflow rule:** rebase freely while the PR is still a draft, or before
+it is opened at all — there are no reviewers whose inline comments could be
+displaced, so the "do not rewrite history" guard below does not yet apply. Once
+the PR is ready-for-review (whether converted to it or opened that way, as a
+trivial change and a promotion are) or any reviewer leaves an inline comment,
+stop rewriting history and follow *Responding to Review Feedback*.
 
 ---
 
@@ -292,18 +298,23 @@ Anything non-obvious, risky, or worth extra scrutiny.
 ### Before Marking Ready
 
 Run this when converting a draft to ready-for-review — or, on a PR that has no
-draft stage (a trivial change, a promotion), immediately before opening it.
+draft stage (a trivial change, a promotion), before merging it. **Not before
+opening:** no workflow runs until the PR exists, since CI triggers on
+`pull_request` and on pushes to `main`/`develop` only — never on a push to a
+feature branch. On a no-draft PR the last item is therefore checked on the open
+PR, and the rest before you open it.
 
 - [ ] Branch is rebased on latest `develop` — does not apply to a promotion PR,
       whose head *is* `develop`
-- [ ] CI is green — or any failure is understood and explicitly noted in the description
 - [ ] No debug code, commented-out blocks, or stray `console.log` / `print` statements
 - [ ] Description is filled out
+- [ ] CI is green — or any failure is understood and explicitly noted in the
+      description. Only observable once the PR is open.
 
 ### Responding to Review Feedback
 
 - **Fix on the same branch** — push new commits, do not open a new PR.
-- **Do not rewrite history once review has begun** — no `rebase` or `push --force` after the PR is converted to ready-for-review or any inline review comment exists, whichever comes first. Before that point (draft stage), rebasing is fine — see *Keeping Your Branch Up to Date*.
+- **Do not rewrite history once review has begun** — no `rebase` or `push --force` once the PR is ready-for-review (converted or opened that way) or any inline review comment exists, whichever comes first. Before that point (draft stage, or before the PR is opened), rebasing is fine — see *Keeping Your Branch Up to Date*.
 - If a comment is resolved, mark it resolved. If you disagree, reply with reasoning before closing it.
 
 ### Resolving Conflicts Before Merge
@@ -418,8 +429,11 @@ git fetch origin
 # 1. The two branches hold identical trees
 git diff origin/main origin/develop        # expect empty
 
-# 2. develop still exists
-git branch -r | grep origin/develop
+# 2. develop still exists — ask the remote, not your cache.
+#    `git branch -r` reads remote-tracking refs, which a plain `git fetch`
+#    does NOT prune, so it would still list origin/develop after GitHub
+#    deleted it. This must query the remote directly.
+git ls-remote --heads origin develop       # expect one line; empty means deleted
 ```
 
 Check the **diff**, not the log. `main` now carries a merge commit that
@@ -433,10 +447,20 @@ protection covers `develop` (#30) the hazard lapses permanently. Until then, if
 `develop` is missing, restore it:
 
 ```bash
-git push origin develop        # from an up-to-date local develop
+# Restore from the promotion merge itself, not from whatever your local
+# develop happens to be — a stale clone would recreate an older tip.
+# Parent 2 of the merge commit IS the exact tip develop had when it merged.
+# If main's tip is no longer that merge, `^2` errors out rather than pushing
+# the wrong commit — find the promotion merge with `git log --merges origin/main`.
+git fetch origin main
+git push origin $(git rev-parse origin/main^2):refs/heads/develop
+git fetch origin && git checkout develop && git reset --hard origin/develop
 ```
 
-GitHub also offers a **Restore branch** button on the merged PR.
+GitHub also offers a **Restore branch** button on the merged PR, which restores
+the same commit. Nothing is ever lost either way: once the promotion has merged,
+`develop`'s tip is reachable from `main` as parent 2 of the merge commit, so
+deletion costs a ref, never history.
 
 ### Cadence
 

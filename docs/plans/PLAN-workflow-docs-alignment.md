@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-35-workflow-docs`
 _Date:_ 2026-08-11
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #35
 
 ---
@@ -393,27 +393,57 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       first, per *Conventions*.
 - [x] 11. **Apply the maintainer's resolutions** to the documents, then re-run
       task 9's integrity check. Only now are the documents final.
+- [x] 12. **Added by `/skill:adversarial-review` (FIX REQUIRED, per `AGENTS.md`
+      §4).** Three findings, all created or left standing by this branch:
+      - **The A.2 guard could not detect the hazard it guards.** The promotion
+        post-merge check was `git branch -r | grep origin/develop`, which reads
+        remote-tracking refs; `fetch.prune` is unset in this repo, so a plain
+        `git fetch` leaves a stale `origin/develop` behind and the grep reports
+        "still exists" in precisely the deletion case. Replaced with
+        `git ls-remote --heads origin develop`, which queries the remote.
+        Verified: returns one line today.
+      - **"CI is green" was unsatisfiable on a no-draft PR.** Task 11's C1-3
+        lead-in said the checklist runs "immediately before opening" for trivial
+        and promotion PRs, but workflows trigger only on `pull_request` and on
+        pushes to `main`/`develop` — never on a feature-branch push (verified:
+        every run on this branch is a `pull_request` event). Reordered so the CI
+        item is checked on the open PR and the rest before opening.
+      - **The conversion-presumption bug survived at a third site.** *Keeping
+        Your Branch Up to Date* and *Responding to Review Feedback* both keyed
+        the history-rewrite guard to the PR being *converted* to
+        ready-for-review — an event that never occurs on a trivial or promotion
+        PR, leaving the guard permanently un-triggered on a literal reading.
+        Both now key off the PR *being* ready-for-review, converted or opened
+        that way.
+      Two LOW findings fixed in the same pass rather than deferred, both
+      one-liners: the `Daily Workflow` `gh pr create` example omitted
+      `--body-file` (opens an editor, blocks an agent, drops the §2 header
+      block), and the promotion restore command pushed from local `develop`,
+      which recreates an older tip from a stale clone — it now restores from
+      parent 2 of the promotion merge. Both documented commands were verified
+      against the real `#32` merge: `git rev-parse 549da73^2` → `07de96d`, and
+      `^2` fails closed on a non-merge tip.
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
+- [x] Write / update tests for all implementation tasks above
       — **not applicable: documentation only, no code changes.** State this
       explicitly in the PR rather than leaving the box ambiguous.
-- [ ] Run full test suite — all tests pass (baseline confirmation that nothing
+- [x] Run full test suite — all tests pass (baseline confirmation that nothing
       in the branch touched code)
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
       (FIX REQUIRED: add tasks to Implementation above and complete them;
        LOW: document rationale in Deferred findings section below)
       The skill's code-oriented checks (panics, overflow, rendering, terminal
       resize) are vacuous on a docs-only branch — do not skip the step on that
       basis. Point it at the documents: a rule that cannot be followed, a
       procedure with a missing step, an instruction that contradicts another.
-- [ ] Update `README.md` if affected
+- [x] Update `README.md` if affected
       (verified 2026-08-11: `README.md`'s only workflow-related line is the
       `CONTRIBUTING.md` link at `:85`, so this is expected to be a no-op —
       confirm rather than assume)
-- [ ] Convert draft PR to ready-for-review; add `Closes #35` to PR description;
+- [x] Convert draft PR to ready-for-review; add `Closes #35` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 35 --remove-label agent --remove-label "in progress" --add-label needs-review`
 - [ ] **After merge, note in #30 that its `#35` prerequisite is satisfied** —
       #30 is the only consumer of this issue and its checklist is gated on it.
