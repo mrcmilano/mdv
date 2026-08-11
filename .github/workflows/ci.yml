@@ -54,6 +54,10 @@ jobs:
   # for all seven check runs above. A matrix job's `result` is the aggregate of
   # its legs, so three `needs:` entries cover all of them, and renaming a matrix
   # leg cannot silently detach a required check.
+  #
+  # It does not stand in for `audit`: that job lives in a different workflow
+  # file and a `needs:` aggregate cannot span workflows, so branch protection
+  # (#30) must require `audit` as a second check by name.
   ci-success:
     needs: [fmt, clippy, test]
     runs-on: ubuntu-latest
