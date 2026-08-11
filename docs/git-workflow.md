@@ -42,6 +42,18 @@ git checkout -b feature/your-feature-name
 Use short, lowercase, hyphenated names: `feature/user-auth`, `fix/login-redirect`.
 Append ticket number when one exists (`feature/issue-42-user-auth`).
 
+> **The repo's default branch is `main`, not `develop`.** Tooling follows the
+> default, so it points at the wrong branch unless you say otherwise. Two
+> consequences, both easy to hit:
+>
+> - A fresh `git clone` checks out `main`. Branching from there without the
+>   `git checkout develop` step above bases your work on the wrong branch — see
+>   *Branched from Wrong Base* to recover.
+> - `gh pr create` targets the default branch when `--base` is omitted, so
+>   **every PR for feature work needs `--base develop` passed explicitly.**
+>   (The one PR that legitimately targets `main` is a promotion — see
+>   *Promoting `develop` → `main`*.)
+
 ---
 
 ## Daily Workflow
@@ -142,29 +154,48 @@ git revert <commit-sha>   # creates a new undo commit — never force-push share
 
 ### PR Merged onto the Wrong Branch (e.g. `main` instead of `develop`)
 
+**This covers a merge that should never have landed on `main`** — typically a
+feature PR opened against the wrong base. Promoting `develop` into `main` is a
+legitimate merge and is *not* this case; see *Promoting `develop` → `main`*.
+Applying the recipe below to a promotion would revert the entire project back
+off `main`.
+
 Always use `git revert -m 1` — never `reset --hard`. By the time a merge lands on `main`, CI/CD pipelines and other collaborators have likely already seen it. Rewriting history is unsafe; a revert commit is the correct response.
+
+The revert itself goes through a PR like any other change — *Core Principles*
+forbids pushing directly to `main`.
 
 ```bash
 # 1. Identify the bad merge commit SHA
 git log --oneline -5 origin/main
 
-# 2. Revert it — -m 1 restores main's side (parent 1), discarding the feature branch changes
+# 2. Revert it on a branch — -m 1 restores main's side (parent 1), discarding
+#    the feature branch changes
 git checkout main
 git pull origin main
+git checkout -b fix/revert-merge-onto-main
 git revert -m 1 <merge-commit-sha>
-git push origin main
+git push -u origin fix/revert-merge-onto-main
 
-# 3. Verify main is clean
+# 3. Open the revert PR against main
+gh pr create --base main --head fix/revert-merge-onto-main \
+  --title "Revert merge onto main"
+
+# 4. Once it is merged, verify main is clean
+git fetch origin
 git log --oneline -5 origin/main
 git diff origin/develop origin/main
 
-# 4. The feature branch is untouched — open a new PR targeting develop
+# 5. The feature branch is untouched — open a new PR targeting develop
 git checkout feature/your-branch
 ```
 
 > `-m 1` is required for merge commits. It tells git which parent to restore: `1` is the branch merged *into* (`main`), `2` is the branch merged *from*. Without it, git cannot determine which side to revert to.
 
 ### Branched from Wrong Base (e.g. from `main` instead of `develop`)
+
+Usually the default-branch trap described under *Branch Strategy*: a fresh clone
+lands on `main`, and branching straight from it bases the work there.
 
 Do not recreate the branch manually. Use `git rebase --onto` to replay your commits onto the correct base:
 
@@ -217,7 +248,8 @@ This is the highest-consequence mistake in this document. **`git revert` is not 
 ### Opening
 
 - **Open a draft PR immediately after the first push** — do not wait until the work is done. This makes the branch visible, triggers CI early, and signals work-in-progress.
-- Target branch: **`develop`** (default).
+- Target branch: **`develop`** — pass `--base develop` explicitly. It is not the
+  tool's default; `gh pr create` would open against `main`. See *Branch Strategy*.
 - PR title mirrors the branch intent: `Add user authentication`, `Fix login redirect`.
 
 ### Description

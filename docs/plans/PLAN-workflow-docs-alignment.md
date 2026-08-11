@@ -250,7 +250,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       - **cadence is a judgement call, not a rule** — no need to promote
         per-PR, but `main` is what a visitor to the public repo sees, so
         letting it drift means the front page goes stale.
-- [ ] 2. **Reframe `### PR Merged onto the Wrong Branch`** (`docs/git-workflow.md:143`).
+- [x] 2. **Reframe `### PR Merged onto the Wrong Branch`** (`docs/git-workflow.md:143`).
       It is currently the document's only discussion of a merge landing on
       `main` and treats that as always a mistake; applying its `git revert -m 1`
       recipe to a legitimate promotion would revert the entire project off
@@ -262,7 +262,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       of the promotion question and repairing it (route the revert through a PR)
       is in scope for this task. Bound the repair to the push mechanics — do not
       rewrite the `-m 1` explanation, which is correct and still needed.
-- [ ] 3. **Record the default-branch hazard** (A3). `origin/HEAD` resolves to
+- [x] 3. **Record the default-branch hazard** (A3). `origin/HEAD` resolves to
       `main`, so a bare `gh pr create` opens against `main` and bypasses
       `develop`: `--base develop` is required on every feature PR. Fix
       `docs/git-workflow.md:220`, which says the target branch is "`develop`
