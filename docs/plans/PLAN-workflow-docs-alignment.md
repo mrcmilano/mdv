@@ -368,7 +368,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       Record the findings in the plan file under a `## C1 findings` section
       (added by this task — the template has none) and commit it, so they
       survive a context loss between this task and the next.
-- [ ] 9. **Formatter integrity check.** Before task 10's round-trip, confirm the
+- [x] 9. **Formatter integrity check.** Before task 10's round-trip, confirm the
       editor-side formatter has not damaged the documents:
       - `grep -n '&gt;\|&lt;\|&amp;'` across the three files returns nothing that
         was not there on `develop`;
