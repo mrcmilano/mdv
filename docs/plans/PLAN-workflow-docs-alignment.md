@@ -380,7 +380,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       - the full `git diff develop...HEAD` contains only intended edits — read
         it, do not skim the stat.
       Run this here and again before converting the PR to ready-for-review.
-- [ ] 10. **Batch every finding into one `needs-decision` round-trip** (C2) —
+- [x] 10. **Batch every finding into one `needs-decision` round-trip** (C2) —
       the six Open questions above plus everything task 8 produced. One comment
       on #35 listing each item with its recommended resolution; then
       `gh issue edit 35 --remove-label agent --add-label needs-decision`.
