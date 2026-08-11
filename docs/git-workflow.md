@@ -282,6 +282,116 @@ After pushing, leave a PR comment describing what conflicted and how it was reso
 
 ---
 
+## Promoting `develop` → `main`
+
+`main` is the public front page of the repo; `develop` is where work
+integrates. Promotion is the routine operation that brings `main` up to date —
+not a release ceremony and not a one-off. `main` falls behind on every merge
+into `develop`, so this runs repeatedly. The whole procedure is below.
+
+### Preconditions
+
+```bash
+git fetch origin
+
+# 1. The payload — expect only the work you intend to promote
+git diff origin/main origin/develop
+git log --oneline origin/main..origin/develop
+
+# 2. main must carry no unique work of its own
+git log --oneline --no-merges origin/develop..origin/main   # expect empty
+```
+
+The second check is `--no-merges` deliberately. `main` legitimately accumulates
+one merge commit per promotion that `develop` never sees — that is how this
+model works, and it is **not** divergence. A **non-merge** commit on `main` is
+divergence: something landed there directly. That needs re-planning, not
+force-merging. Stop and escalate.
+
+### Open the PR
+
+Promotion goes through a PR — never a direct push. *Core Principles* forbids
+committing directly to either branch (enforced by branch protection on both
+branches, #30), and the PR is also what gets the promotion tested: the CI and
+audit workflows both run on pull requests targeting `main`.
+
+```bash
+# write the body to a scratch file first, then:
+gh pr create --base main --head develop \
+  --title "Promote develop to main" \
+  --body-file <scratch-file>
+```
+
+PR body — copy this as-is:
+
+```
+Brings `main` up to date with `develop`.
+
+**Merge with "Create a merge commit" — not squash, not rebase.** Squashing
+collapses the promoted history into a single commit on `main`. Rebasing
+replays it under new SHAs. Both permanently diverge `main` from `develop` and
+break every future promotion.
+```
+
+That paragraph is the safeguard for whoever clicks the merge button, not
+filler. Reproduce it in every promotion PR.
+
+### Merge method: "Create a merge commit"
+
+**Never squash. Never rebase.** All three merge methods are enabled on this
+repo and GitHub pre-selects whichever was used last, so the dropdown sits one
+absent-minded click away from an irreversible mistake.
+
+- **Squash** collapses the entire promoted history into one commit on `main` —
+  literally the history curation #20 considered and rejected — and diverges
+  `main` from `develop` permanently.
+- **Rebase** replays the same commits onto `main` under new SHAs, duplicating
+  the history under different identities. Same divergence, different route.
+- **Merge commit** preserves every commit as-is, and is the only option
+  consistent with promoting `develop` as it stands.
+
+The divergence is not cosmetic: once `main` holds commits `develop` cannot
+recognise, the precondition above fails on every subsequent promotion and each
+one turns into a conflict-resolution exercise.
+
+Merging the PR is the maintainer's action, as with any PR in this repo.
+
+### After the merge
+
+```bash
+git fetch origin
+
+# 1. The two branches hold identical trees
+git diff origin/main origin/develop        # expect empty
+
+# 2. develop still exists
+git branch -r | grep origin/develop
+```
+
+Check the **diff**, not the log. `main` now carries a merge commit that
+`develop` does not; that is expected, and is not divergence. Merging `main`
+back into `develop` is **not** required.
+
+The second check exists because this repo deletes head branches automatically
+on merge, and a promotion PR's head branch is `develop` itself. GitHub skips
+protected and default branches — `main` is the default — so once branch
+protection covers `develop` (#30) the hazard lapses permanently. Until then, if
+`develop` is missing, restore it:
+
+```bash
+git push origin develop        # from an up-to-date local develop
+```
+
+GitHub also offers a **Restore branch** button on the merged PR.
+
+### Cadence
+
+A judgement call, not a rule. There is no need to promote after every merge
+into `develop`, but `main` is what a visitor to the public repo sees — let it
+drift and the front page goes stale.
+
+---
+
 ## Hard Rules
 
 - **No force-push to `develop` or `main`** under any circumstances.

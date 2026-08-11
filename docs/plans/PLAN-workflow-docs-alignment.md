@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-35-workflow-docs`
 _Date:_ 2026-08-11
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #35
 
 ---
@@ -207,7 +207,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
 
 ### Implementation
 
-- [ ] 0. Create branch `chore/issue-35-workflow-docs` from develop following docs/git-workflow.md
+- [x] 0. Create branch `chore/issue-35-workflow-docs` from develop following docs/git-workflow.md
       Commit this plan as the first commit with `_Status:_` flipped `DRAFT` →
       `APPROVED`, push immediately, and open the draft PR against `develop` with
       the `AGENTS.md` §2 header block. Use `ref #35`, **not** `Closes #35`, while
@@ -218,7 +218,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
 
 **Part A — promotion procedure**
 
-- [ ] 1. **Add a `## Promoting develop → main` section to `docs/git-workflow.md`**,
+- [x] 1. **Add a `## Promoting develop → main` section to `docs/git-workflow.md`**,
       after *Pull Requests* and before *Hard Rules*. Carry over R1/R2 of
       `docs/plans/PLAN-public-release-readiness.md:446–491`, generalised from a
       one-off release step into a repeatable procedure. It must state:
