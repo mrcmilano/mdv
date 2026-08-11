@@ -343,7 +343,7 @@ path, then force-drops that commit off the branch.
       `gh api repos/actions/checkout/git/ref/tags/v4` before committing, in
       case the tag has moved since this plan was written.
 
-- [ ] 6. **Both workflows: comment guarding `pull_request_target`** (item 6a).
+- [x] 6. **Both workflows: comment guarding `pull_request_target`** (item 6a).
       One line above each `on:` block: `pull_request` is deliberate and must
       not become `pull_request_target`. Say why in the comment — fork PRs run
       untrusted code, and `pull_request_target` would run it with a write token

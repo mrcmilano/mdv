@@ -1,5 +1,8 @@
 name: CI
 
+# `pull_request` is deliberate and must not become `pull_request_target`.
+# Fork PRs run untrusted code; `pull_request_target` would run that code in the
+# base repository's context with a writable token and access to secrets.
 on:
   push:
     branches: [main, develop]
