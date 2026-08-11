@@ -17,7 +17,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -50,6 +50,11 @@ jobs:
       # Fork PRs cap GITHUB_TOKEN at read-only regardless of any `permissions:`
       # block, so that action would 403 on the first outside contribution that
       # touches Cargo.lock.
+      #
+      # dtolnay/rust-toolchain is deliberately left on a branch ref rather than
+      # SHA-pinned: the action reads github.action_ref to decide which toolchain
+      # to install, so a SHA breaks it unless `with: toolchain:` is also added.
+      # #29 will move this ref to `@1.xx.0` for MSRV anyway.
       - uses: dtolnay/rust-toolchain@stable
         if: steps.lockfile.outputs.changed == 'true'
 

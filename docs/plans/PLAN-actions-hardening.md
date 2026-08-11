@@ -323,7 +323,7 @@ path, then force-drops that commit off the branch.
       stays separate because it lives in a different workflow file and a
       `needs:` aggregate cannot span workflows.
 
-- [ ] 5. **Both workflows: pin `actions/checkout`; comment the toolchain ref** (items 5a, 5b).
+- [x] 5. **Both workflows: pin `actions/checkout`; comment the toolchain ref** (items 5a, 5b).
       Replace every `actions/checkout@v4` (3 in `ci.yml`, 1 in `audit.yml`)
       with
       `actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0`.
