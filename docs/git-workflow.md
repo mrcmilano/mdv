@@ -1,11 +1,19 @@
 # Git Workflow Instructions
 
+> **Audience:** everything here applies to anyone working on `mdv`, including
+> outside contributors. Two points are specific to a PR opened from a **fork**:
+> whether to open it as a draft is the contributor's own call, and the
+> "CI is green" item under *Pull Requests > Before Marking Ready* cannot be
+> satisfied by the contributor alone — fork workflows do not run until a
+> maintainer approves them. See `CONTRIBUTING.md`.
+
 ## Core Principles
 
 - **Never commit directly to `main` or `develop`.** All work happens on a
   dedicated branch and lands through a PR — no exception for a one-line or
-  documentation-only change. Enforced by branch protection with no bypass on
-  either branch (#30).
+  documentation-only change. Branch protection with no bypass on either branch
+  (#30) is the backstop; it has not landed yet, so today the rule holds because
+  it is the rule, not because a setting rejects the push.
 - Keep commits small, atomic, and focused on a single concern.
 - Follow the Conventional Commits specification: `<type>[optional scope]: <description>`. Types: `feat:` (MINOR), `fix:` (PATCH), `BREAKING CHANGE` or `!` after type/scope (MAJOR), plus `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `hotfix:`. Use imperative mood in descriptions.
 
@@ -111,13 +119,19 @@ rewrites `develop` — forbidden outright by *Hard Rules* — and a revert onto
 
 Prefer rebase over merge to keep history linear.
 
-**Solo-workflow rule:** rebase freely while the PR is still a draft, or before
-it is opened at all — there are no reviewers whose inline comments could be
-displaced, so the "do not rewrite history" guard below does not yet apply. Once
-the PR is ready-for-review — whether converted to it or opened that way, as the
-three PR kinds listed under *Pull Requests > Opening* are — or any reviewer
-leaves an inline comment, stop rewriting history and follow *Responding to
-Review Feedback*.
+**Solo-workflow rule:** the "do not rewrite history" guard below protects one
+thing — a reviewer's inline comments, which rewriting history displaces. So its
+trigger is those comments existing, **not** the PR's draft state: rebase freely
+for as long as no inline review comment has been left, whether the PR is a
+draft, ready-for-review, or not yet opened. Once one exists, stop rewriting
+history and follow *Responding to Review Feedback*.
+
+Keying the guard to the draft→ready conversion instead would break both ways on
+the three PR kinds that open ready-for-review (*Pull Requests > Opening*): the
+conversion never happens, so on one reading the guard never fires at all, and on
+the other it fires the instant the PR opens — which would forbid the rebase that
+*Resolving Conflicts Before Merge* requires, leaving a conflicted trivial PR with
+no legal way to merge.
 
 ---
 
@@ -221,8 +235,15 @@ git diff <merge-commit-sha>^1 origin/main   # expect empty
 #    are gone, by reading what it brought and confirming none of it remains.
 git diff <merge-commit-sha>^1 <merge-commit-sha>   # what the bad merge added
 
-# 5. The feature branch is untouched — open a new PR targeting develop
-git checkout feature/your-branch
+# 5. Re-land the feature on develop — with FRESH commits. See the note below:
+#    re-merging the original commits leaves main without the feature forever.
+#    The remote copy of the branch is gone (this repo deletes head branches on
+#    merge, and the bad merge did exactly that), so rebuild from your local ref
+#    or from the merged PR's "Restore branch" button.
+git fetch origin && git checkout -b feature/your-branch-redo origin/develop
+git cherry-pick <first-sha>^..<last-sha>    # the original branch's commits
+git log --oneline origin/develop..HEAD      # SHAs must differ from the originals
+git push -u origin feature/your-branch-redo
 ```
 
 > `-m 1` is required for merge commits. It tells git which parent to restore: `1` is the branch merged *into* (`main`), `2` is the branch merged *from*. Without it, git cannot determine which side to revert to.
@@ -233,10 +254,27 @@ git checkout feature/your-branch
 > `main`↔`develop` diff is the success condition for a **promotion** (see
 > *Promoting `develop` → `main`*), not for a revert.
 
+> **Why step 5's commits have to be new.** The originals are already in `main`'s
+> history through the bad merge, and the revert undid their *content* without
+> removing the *commits*. Merge them into `develop` unchanged and the next
+> promotion brings nothing over: they are already in the promotion's merge base,
+> so git sees no change to apply. `main` ends up permanently without the
+> feature, and the promotion's own `git diff origin/main origin/develop` check
+> comes back non-empty with no obvious cause. Cherry-picking re-times each
+> commit and so gives it a SHA `main` has never seen, which the promotion then
+> carries normally — that is what step 5's `git log` check confirms. The redo
+> branch needs its own PR into `develop`; the original PR stays closed.
+
 ### Branched from Wrong Base (e.g. from `main` instead of `develop`)
 
 Usually the default-branch trap described under *Branch Strategy*: a fresh clone
 lands on `main`, and branching straight from it bases the work there.
+
+**This section does not apply to a revert of a merge that reached `main` by
+mistake.** That branch is based on `main` deliberately — see *PR Merged onto the
+Wrong Branch* — and running the `rebase --onto` below on it would destroy the
+revert it carries and drag all of `develop` onto a `main`-based branch. Being
+based on `main` is only a mistake on a branch that was headed for `develop`.
 
 Do not recreate the branch manually. Use `git rebase --onto` to replay your commits onto the correct base:
 
@@ -295,6 +333,9 @@ This is the highest-consequence mistake in this document. **`git revert` is not 
   trivial change (`AGENTS.md` §1), a promotion PR (*Promoting `develop` →
   `main`*), and a revert of a merge that landed on `main` by mistake (*PR Merged
   onto the Wrong Branch*). None has a work-in-progress period to signal.
+- **A PR from a fork is the contributor's own call.** Nothing here obliges an
+  outside contributor to open a draft first; the three kinds above are the ones
+  that skip the stage by rule rather than by choice. See `CONTRIBUTING.md`.
 - Target branch: **`develop`** — pass `--base develop` explicitly. It is not the
   tool's default; `gh pr create` would open against `main`. See *Branch Strategy*.
 - PR title mirrors the branch intent: `Add user authentication`, `Fix login redirect`.
@@ -338,12 +379,18 @@ PR, check every other item before you open it, and the CI item once it is open.
 - [ ] No debug code, commented-out blocks, or stray `console.log` / `print` statements
 - [ ] Description is filled out
 - [ ] CI is green — or any failure is understood and explicitly noted in the
-      description. Only observable once the PR is open.
+      description. Only observable once the PR is open, and on a PR from a fork
+      only after a maintainer approves the workflow run, which is not the
+      contributor's to do.
 
 ### Responding to Review Feedback
 
 - **Fix on the same branch** — push new commits, do not open a new PR.
-- **Do not rewrite history once review has begun** — no `rebase` or `push --force` once the PR is ready-for-review (converted or opened that way) or any inline review comment exists, whichever comes first. Before that point (draft stage, or before the PR is opened), rebasing is fine — see *Keeping Your Branch Up to Date*.
+  **Feature branches only.** A promotion PR's head branch *is* `develop`, so
+  pushing a fix to it is a direct commit to `develop`, which *Core Principles*
+  forbids: land the fix as an ordinary PR into `develop` and the promotion PR
+  picks it up on its own. A revert PR takes fixes on its own `main`-based branch.
+- **Do not rewrite history once review has begun** — no `rebase` or `push --force` once any inline review comment exists. Before that point rebasing is fine regardless of the PR's draft state — see the *Solo-workflow rule* under *Keeping Your Branch Up to Date*.
 - If a comment is resolved, mark it resolved. If you disagree, reply with reasoning before closing it.
 
 ### Resolving Conflicts Before Merge
@@ -372,7 +419,9 @@ After pushing, leave a PR comment describing what conflicted and how it was reso
 
 ### CI Failures
 
-- Fix on the branch and push — never close and reopen the PR.
+- Fix on the branch and push — never close and reopen the PR. The **feature
+  branches only** qualifier under *Responding to Review Feedback* applies here
+  too: a promotion PR's head is `develop`, which takes no direct pushes.
 - If the failure is pre-existing or clearly unrelated to your change, note it explicitly in a PR comment and flag it for the reviewer.
 
 ### After Merge
@@ -381,7 +430,10 @@ After pushing, leave a PR comment describing what conflicted and how it was reso
   delete it manually — the fallback, not the normal path. (Promotion PRs are the
   case to watch, since their head branch is `develop` itself — see *Promoting
   `develop` → `main`*.)
-- Do not reuse the branch name for future work.
+- Do not reuse the branch name for future work. **Feature branches only** — the
+  two `main`-targeting PRs reuse theirs by construction: a promotion's head is
+  always `develop`, and the revert recipe names its branch
+  `fix/revert-merge-onto-main` every time it runs.
 
 ---
 
@@ -404,14 +456,23 @@ git diff origin/main origin/develop
 git log --oneline origin/main..origin/develop
 
 # 2. main must carry no unique work of its own
-git log --oneline --no-merges origin/develop..origin/main   # expect empty
+#    Expect empty — with one legitimate exception, see below.
+git log --oneline --no-merges origin/develop..origin/main
 ```
 
 The second check is `--no-merges` deliberately. `main` legitimately accumulates
 one merge commit per promotion that `develop` never sees — that is how this
 model works, and it is **not** divergence. A **non-merge** commit on `main` is
-divergence: something landed there directly. That needs re-planning, not
-force-merging. Stop and escalate.
+normally divergence: something landed there directly. That needs re-planning,
+not force-merging. Stop and escalate.
+
+**The one legitimate non-merge commit on `main`** is a revert produced by *PR
+Merged onto the Wrong Branch*. It undoes a merge that should never have landed,
+`develop` never sees it, and it stays on `main` permanently — so once one exists
+this check is non-empty on **every** promotion from then on. Identify it by
+message and confirm it is exactly that revert and nothing else; then proceed.
+Treating it as divergence would block every future promotion on a false alarm.
+Anything else in the list is real divergence — stop and escalate.
 
 ### Open the PR
 
@@ -489,11 +550,22 @@ protection covers `develop` (#30) the hazard lapses permanently. Until then, if
 ```bash
 # Restore from the promotion merge itself, not from whatever your local
 # develop happens to be — a stale clone would recreate an older tip.
-# Parent 2 of the merge commit IS the exact tip develop had when it merged.
-# If main's tip is no longer that merge, `^2` errors out rather than pushing
-# the wrong commit — find the promotion merge with `git log --merges origin/main`.
-git fetch origin main
-git push origin $(git rev-parse origin/main^2):refs/heads/develop
+# Parent 2 of that merge IS the exact tip develop had when it merged.
+git fetch origin '+refs/heads/main:refs/remotes/origin/main'
+
+# Name the promotion merge explicitly. Do NOT shorten this to `origin/main^2`:
+# main's tip is not always the promotion merge — a revert PR (PR Merged onto
+# the Wrong Branch) also lands there as a merge commit — and on any other merge
+# `^2` resolves to THAT merge's second parent and recreates develop at the wrong
+# commit, silently and with exit status 0.
+git log --merges --oneline origin/main | head -5    # identify the promotion merge
+PROMO=<sha-of-the-promotion-merge>
+
+# --verify is what makes a wrong SHA fail loudly. Without it the command
+# substitution is never empty even on failure: `git rev-parse` prints its own
+# argument back on stdout, so the push runs with a garbage refspec instead.
+git rev-parse --verify "$PROMO^2"
+git push origin "$PROMO^2":refs/heads/develop
 git fetch origin && git checkout develop && git reset --hard origin/develop
 ```
 
@@ -513,6 +585,6 @@ drift and the front page goes stale.
 ## Hard Rules
 
 - **No force-push to `develop` or `main`** under any circumstances.
-- **`--force-with-lease` is permitted on feature branches only** — for rebase and conflict resolution, and only before reviewers have left inline comments.
+- **`--force-with-lease` is permitted on any branch except `develop` and `main`** — feature branches and the `main`-based revert branch of *PR Merged onto the Wrong Branch* — for rebase and conflict resolution, and only before any inline review comment has been left.
 - **No secrets, credentials, or environment files** committed — ever. See *Secret or Credential Accidentally Committed* above.
 - If unsure about a destructive operation (`reset`, `rebase` on shared branches, `push --force`): **stop and ask**.

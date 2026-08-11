@@ -527,6 +527,82 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       caret syntax survives the shell (`extendedglob` unset;
       `git rev-parse 549da73^1` → `f29b108`).
 
+- [x] 15. **Added by a second `/skill:pre-merge-code-review` pass (F1–F9,
+      maintainer approved 2026-08-11).** The review built the cross-product of
+      every PR *shape* the documents now describe against every rule keyed to a
+      base branch, head branch, rebase target, draft state or force-push —
+      including rules this branch never touched, which is where most of these
+      were. Six shapes exist, not the two the prose counts: non-trivial feature
+      PR, trivial PR, promotion PR, revert-of-bad-merge PR, external/fork PR,
+      and the re-landed feature PR after a revert.
+      - **F1 (high) — a revert onto `main` permanently broke every later
+        promotion, twice over.** Verified by executing the documented recipes in
+        a throwaway repo, not by reading them. (a) `git revert -m 1` leaves a
+        **non-merge** commit on `main`, so promotion precondition 2
+        (`--no-merges origin/develop..origin/main`, "expect empty") is non-empty
+        from then on *forever* — and the surrounding prose reads that as
+        divergence and says stop and escalate, halting every future promotion on
+        a false alarm. (b) Worse, step 5's "the feature branch is untouched —
+        open a new PR targeting `develop`" loses the feature: its commits are
+        already in `main`'s history through the bad merge, so the next promotion
+        has nothing to apply and `main` stays permanently without the work,
+        while the promotion's own "expect empty" diff check fails with no stated
+        cause. Precondition 2 now names the revert commit as the one legitimate
+        non-merge commit on `main`; step 5 now re-lands the work with **fresh**
+        commits (cherry-pick onto `develop`) and explains why. Both remedies
+        were tested; the cherry-pick was chosen over revert-the-revert because
+        the latter would add a **third** `main`-targeting PR shape, which is
+        exactly the enumeration tasks 13–14 fixed.
+      - **F2 (high) — the `develop` restore command silently restored the wrong
+        commit.** The comment claimed "`^2` errors out rather than pushing the
+        wrong commit". False: `git rev-parse` prints its own argument back on
+        stdout when it fails, so the substitution is never empty, and that
+        fail-closed behaviour holds only when `main`'s tip is a **non-merge**
+        commit — a state this workflow forbids, since `main`'s tip is always a
+        promotion or revert-PR merge. Demonstrated in a sandbox: with `develop`
+        deleted and a non-promotion merge at `main`'s tip, the command recreated
+        `develop` at a `main`-based branch tip, exit 0, no warning. Now names the
+        promotion merge explicitly and gates the push on `rev-parse --verify`.
+      - **F3 (medium-high) — no-draft PRs could never rebase, yet the conflict
+        recipe ordered them to.** Task 12/14 keyed the history-rewrite guard to
+        the PR *being* ready-for-review ("converted or opened that way"), which
+        for the three no-draft kinds is true at t=0, while *Resolving Conflicts
+        Before Merge* keyed the same permission to "no inline review comments"
+        and instructs rebase + `--force-with-lease`. A conflicted trivial PR was
+        simultaneously required and forbidden to take the only remedy offered.
+        All sites now key off the single thing the guard protects: an inline
+        review comment existing.
+      - **F4 (medium) — "Fix on the same branch" instructed a direct push to
+        `develop`.** Unqualified at *Responding to Review Feedback* and *CI
+        Failures*; a promotion PR's head branch **is** `develop`. Task 14 had
+        guarded the rebase and force-push sites but not the plain-push ones.
+        Both now carry the guard.
+      - **F5 (medium) — *Branched from Wrong Base* mis-fired on the revert
+        shape.** Untouched by this branch, and its `rebase --onto develop main`
+        is precisely wrong for a branch whose `main` base is deliberate. Now
+        excluded explicitly.
+      - **F6 (medium) — revert step 5 assumed a branch the repo had already
+        deleted.** `deleteBranchOnMerge` is `true`, so the bad merge deleted the
+        feature branch on the remote — the same mechanism the promotion section
+        devotes a whole check to. Folded into the step 5 rewrite.
+      - **F7 (medium) — "Do not reuse the branch name" was unsatisfiable for
+        both `main`-targeting shapes.** A promotion's head is always `develop`;
+        the revert recipe hard-codes its branch name. Scoped to feature branches.
+      - **F8 (low-medium) — `docs/git-workflow.md` had no audience statement**,
+        so every rule bound external contributors, including the draft-PR
+        mandate that the "three kinds" enumeration does not cover, and a
+        "CI is green" item a fork contributor cannot satisfy alone. Added an
+        audience note, a fork bullet under *Opening*, a qualifier on the CI item,
+        and a pointer from `CONTRIBUTING.md`.
+      - **F9 (low) — the documents disagreed on whether protection is live.**
+        *Core Principles* and `AGENTS.md` §1 asserted it as enforced now; the
+        promotion section's restore procedure exists only because it is not.
+        **Maintainer ruled 2026-08-11:** protection is not live and goes live
+        when #30 lands. Both sites now say so, which also matches the "until
+        then" framing the promotion section already used. This supersedes the
+        Open question 6 / task 13 F7 resolution, which had left the assertion
+        standing.
+
 ### Finish
 - [x] Write / update tests for all implementation tasks above
       — **not applicable: documentation only, no code changes.** State this

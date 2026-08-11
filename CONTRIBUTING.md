@@ -39,6 +39,10 @@ See `AGENTS.md` for build/test/lint commands and code style. Note: the
 plan-file/label workflow documented there is the maintainer's own process —
 external PRs don't need to follow it.
 
+`docs/git-workflow.md` covers commit-message format, branch naming and PR
+conventions, and applies to outside PRs too — its opening note says which two
+points work differently for a PR from a fork.
+
 ## Scope
 
 `mdv` is deliberately a lean, read-only viewer. Some things are non-goals by
