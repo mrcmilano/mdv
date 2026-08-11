@@ -479,6 +479,54 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       maintainer-approved resolution to Open question 6 — the wording is applied
       when #30 lands, not before.
 
+- [x] 14. **Added by a second `/skill:adversarial-review` pass** over task 13's
+      commits (`AGENTS.md` §4). Six findings, all created or sharpened by the
+      task-13 edits; two were FIX REQUIRED.
+      - **FIX REQUIRED — the rebase instructions collided with *Hard Rules*.**
+        *Keeping Your Branch Up to Date* and *Resolving Conflicts Before Merge*
+        both said "rebase onto `develop`" and force-push, unconditionally, of
+        "a PR". A promotion PR's head branch **is** `develop`, so following the
+        conflict recipe on one is a force-push to `develop` — forbidden "under
+        any circumstances" by *Hard Rules*. On a revert PR the same instruction
+        drags all of `develop` into a `main`-based branch. Task 13 had exempted
+        these two PRs in *Before Marking Ready* only; both other sites now carry
+        a **Feature branches only** guard, placed *above* the command block in
+        the conflict section so it is read before the command is copied. A
+        promotion PR that conflicts is an escalation (its precondition failed),
+        and a revert PR rebases onto `origin/main`.
+      - **FIX REQUIRED — the two `main`-targeting PRs had no defined process.**
+        §1 declares its trivial/non-trivial lists exhaustive and warns against
+        carrying steps over by inference, but task 13 added a third category to
+        neither list — leaving "does a promotion need a plan file?" unanswerable,
+        which is Open question 5's failure mode on a new path. **Maintainer ruled
+        2026-08-11:** both are procedures, not features — no plan file, no §5
+        label transition, no §3 test loop, no step 5 Finish;
+        `docs/git-workflow.md` is their complete specification. Stated in §1,
+        along with the qualifier that the two lists stay exhaustive *for ordinary
+        work*. **Accepted risk, recorded:** a revert onto `main` therefore gets
+        no adversarial review.
+      - **Unsatisfiable check (medium).** Step 4's
+        `git diff <merge-commit-sha>^1 origin/main` can never be empty if
+        anything legitimately landed on `main` after the bad merge — the same
+        defect class as task 12's "CI is green" finding. The recipe now states
+        the assumption and gives the fallback check for that case.
+      - **Promotion with nothing to promote (low).** An empty payload made
+        `gh pr create` fail with an opaque "No commits between main and develop".
+        Precondition 1 now names the empty case and says to stop.
+      - **`hotfix:` had no path (low).** Task 13's absolute "Nothing else targets
+        `main`" slammed a door the Conventional Commits type list at `:10` opens.
+        *Branch Strategy* now says there is no separate hotfix path: an urgent
+        fix branches from `develop` and reaches `main` by promotion.
+      - **Dangling reference (low).** §2's "open ready-for-review **for the same
+        reason**" pointed at a reason stated in neither §1 nor §2. Replaced with
+        the reason itself.
+      **Not fixed, accepted:** step 4's `<merge-commit-sha>^1` returns a
+      plausible-but-wrong answer if a non-merge SHA is substituted — reachable
+      only by skipping step 2, which fails loudly first
+      (`git revert -m 1` rejects a non-merge). Verified in-environment that the
+      caret syntax survives the shell (`extendedglob` unset;
+      `git rev-parse 549da73^1` → `f29b108`).
+
 ### Finish
 - [x] Write / update tests for all implementation tasks above
       — **not applicable: documentation only, no code changes.** State this

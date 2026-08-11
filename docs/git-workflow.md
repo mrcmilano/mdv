@@ -58,7 +58,9 @@ Append ticket number when one exists (`feature/issue-42-user-auth`).
 >   **every PR for feature work needs `--base develop` passed explicitly.**
 >   (Exactly two PRs legitimately target `main`: a promotion — see *Promoting
 >   `develop` → `main`* — and a revert of a merge that landed on `main` by
->   mistake, see *PR Merged onto the Wrong Branch*.)
+>   mistake, see *PR Merged onto the Wrong Branch*. There is no separate
+>   hotfix path despite the `hotfix:` commit type above: an urgent fix branches
+>   from `develop` like anything else and reaches `main` by promotion.)
 
 ---
 
@@ -101,6 +103,11 @@ Rebase onto `develop` before the first commit of any working period, and always 
 git fetch origin
 git rebase origin/develop
 ```
+
+**Feature branches only.** Never run this on either of the two `main`-targeting
+PRs (*Branch Strategy*): a promotion's head *is* `develop`, so rebasing it
+rewrites `develop` — forbidden outright by *Hard Rules* — and a revert onto
+`main` must stay based on `main`, or it drags all of `develop` into the revert.
 
 Prefer rebase over merge to keep history linear.
 
@@ -208,8 +215,11 @@ git fetch origin
 git log --oneline -5 origin/main
 git diff <merge-commit-sha>^1 origin/main   # expect empty
 
-#    Not empty? Something else landed on main after the bad merge. Inspect
-#    what, and why it is on main at all, before reverting anything further.
+#    This assumes nothing landed on main after the bad merge — the normal case,
+#    since you revert as soon as you notice. If something did (a promotion, say)
+#    the diff can never be empty: check instead that the bad merge's own changes
+#    are gone, by reading what it brought and confirming none of it remains.
+git diff <merge-commit-sha>^1 <merge-commit-sha>   # what the bad merge added
 
 # 5. The feature branch is untouched — open a new PR targeting develop
 git checkout feature/your-branch
@@ -340,6 +350,15 @@ PR, check every other item before you open it, and the CI item once it is open.
 
 When a PR has conflicts, rebase onto `develop` — do not merge `develop` into your branch. This is an expected workflow step; `--force-with-lease` is appropriate here provided no inline review comments have been left that would be displaced.
 
+**Feature branches only**, for the reasons given under *Keeping Your Branch Up to
+Date* — the force-push below would land on `develop` itself if run on a
+promotion PR. The two `main`-targeting PRs resolve conflicts differently:
+
+- A **promotion PR should not conflict at all.** If it does, `main` has diverged
+  and the precondition in *Promoting `develop` → `main`* has already failed —
+  that needs re-planning, not conflict resolution. Stop and escalate.
+- A **revert PR** rebases onto `origin/main`, never `origin/develop`.
+
 ```bash
 git fetch origin
 git rebase origin/develop
@@ -378,7 +397,9 @@ into `develop`, so this runs repeatedly. The whole procedure is below.
 ```bash
 git fetch origin
 
-# 1. The payload — expect only the work you intend to promote
+# 1. The payload — expect only the work you intend to promote.
+#    Empty? main is already current and there is nothing to promote — stop here.
+#    `gh pr create` would fail with "No commits between main and develop".
 git diff origin/main origin/develop
 git log --oneline origin/main..origin/develop
 

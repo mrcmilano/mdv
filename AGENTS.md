@@ -71,6 +71,12 @@ history it repairs. Both are run per `docs/git-workflow.md` (*Promoting
 `main`, and neither is an exception to the branch-and-PR rule itself — both
 still go through a PR.
 
+Neither carries a plan file, a §5 label transition, the §3 test loop or the
+step 5 Finish. They are procedures, not features — `docs/git-workflow.md` is
+their complete specification, and the steps there are the whole of what they
+require. So the trivial and non-trivial lists below remain exhaustive **for
+ordinary work**, which is everything except these two.
+
 A change is **trivial** only if it has zero logic impact AND is limited in scope
 (one-liner, typo, `.md` wording). When in doubt, treat as non-trivial.
 
@@ -195,9 +201,10 @@ branch**. A trivial change (§1) opens its PR ready-for-review, so it skips the
 draft stage and the `Plan: / Source: / Status: WIP` header block — and may carry
 `Closes #<N>` from the start, since there is no later conversion at which to add
 it. The two `main`-targeting PRs named in §1 — a promotion and a revert of a bad
-merge — open ready-for-review for the same reason and carry no header block
-either; `docs/git-workflow.md` governs both. Everything from **Before any
-subsequent git operation** onward applies to every path.
+merge — also open ready-for-review and carry no header block: neither has a
+work-in-progress period to signal, and `docs/git-workflow.md` governs both.
+Everything from **Before any subsequent git operation** onward applies to every
+path.
 
 **After the first push on a new branch**, open a draft PR targeting `develop`
 immediately — do not wait until the work is complete. The draft PR description
