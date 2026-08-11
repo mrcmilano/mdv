@@ -12,7 +12,12 @@ thing you can include.
 
 ## Pull requests
 
-Target `develop`, not `main`. Before opening a PR, make sure these pass:
+Target `develop`, not `main` — and say so explicitly. `main` is this repo's
+default branch, so both `gh pr create` and the GitHub web UI preselect it;
+pass `--base develop` (or change the base in the UI) or your PR opens against
+the wrong branch.
+
+Before opening a PR, make sure these pass:
 
 ```bash
 cargo fmt --check
@@ -24,6 +29,11 @@ CI runs clippy and the test suite with `--locked`, so if your change adds,
 removes, or bumps a dependency you must commit the updated `Cargo.lock` —
 otherwise CI fails even though everything passes locally. This is the one
 non-obvious way a well-formed PR goes red.
+
+The other one is CI that never starts: workflows on a PR from a fork require
+maintainer approval before they run at all. A fresh PR showing no checks — or
+"waiting for approval" — is expected, not a broken pipeline. It clears once the
+run is approved.
 
 See `AGENTS.md` for build/test/lint commands and code style. Note: the
 plan-file/label workflow documented there is the maintainer's own process —

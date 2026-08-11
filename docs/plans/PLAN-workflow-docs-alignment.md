@@ -314,7 +314,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       Then give the trivial path a branch name source per Open question 3 —
       non-trivial work takes its name from the plan file (§1 step 2), which
       trivial changes do not have.
-- [ ] 6. **Verify and align `docs/git-workflow.md:5`, `:280` and `:287`** (B4).
+- [x] 6. **Verify and align `docs/git-workflow.md:5`, `:280` and `:287`** (B4).
       Task 1 has already shifted these line numbers — the targets are, by
       heading: the first bullet of *Core Principles* ("Never commit directly to
       `main` or `develop`"), the first bullet of *After Merge* ("Delete the
@@ -330,7 +330,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       side. If this task produces a large diff, something has been
       over-interpreted — re-read B4, which asks to *verify* consistency, not to
       manufacture it.
-- [ ] 7. **`CONTRIBUTING.md` pass** (B5). `:29–30` (plan-file/label workflow is
+- [x] 7. **`CONTRIBUTING.md` pass** (B5). `:29–30` (plan-file/label workflow is
       the maintainer's own process) stays true and should not change. Check
       `:15` ("Target `develop`, not `main`") against task 3's finding and make
       it explicit that `--base develop` is required because the tool default is

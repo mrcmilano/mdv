@@ -2,7 +2,10 @@
 
 ## Core Principles
 
-- **Never commit directly to `main` or `develop`.** All implementation work happens on a dedicated branch.
+- **Never commit directly to `main` or `develop`.** All work happens on a
+  dedicated branch and lands through a PR — no exception for a one-line or
+  documentation-only change. Enforced by branch protection with no bypass on
+  either branch (#30).
 - Keep commits small, atomic, and focused on a single concern.
 - Follow the Conventional Commits specification: `<type>[optional scope]: <description>`. Types: `feat:` (MINOR), `fix:` (PATCH), `BREAKING CHANGE` or `!` after type/scope (MAJOR), plus `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `hotfix:`. Use imperative mood in descriptions.
 
@@ -309,7 +312,10 @@ After pushing, leave a PR comment describing what conflicted and how it was reso
 
 ### After Merge
 
-- Delete the remote branch immediately.
+- The remote branch is deleted automatically when the PR merges. If it survives,
+  delete it manually — the fallback, not the normal path. (Promotion PRs are the
+  case to watch, since their head branch is `develop` itself — see *Promoting
+  `develop` → `main`*.)
 - Do not reuse the branch name for future work.
 
 ---
