@@ -11,10 +11,12 @@
 
 ### Example Commit Messages
 
-```feat: add user authentication```
-```fix: resolve login redirect issue```
-```docs: update README with new setup instructions```
-```chore: update dependencies```
+```
+feat: add user authentication
+fix: resolve login redirect issue
+docs: update README with new setup instructions
+chore: update dependencies
+```
 
 When a commit completes a plan task, append the task and issue reference inline
 in the subject, after the description: `feat: add TOC overlay (task 3, ref #42)`.
@@ -77,8 +79,10 @@ git add path/to/changed_file.py path/to/other_file.py
 git commit -m "feat: add concise description of change"
 
 # 4. Push and open the PR targeting develop
-#    (draft on non-trivial work — see Pull Requests > Opening)
+#    --base is required: the repo's default branch is main, not develop.
+#    Drop --draft on a trivial change — see Pull Requests > Opening.
 git push -u origin feature/my-change
+gh pr create --draft --base develop --title "Add concise description of change"
 ```
 
 ---
@@ -263,8 +267,9 @@ This is the highest-consequence mistake in this document. **`git revert` is not 
 
 ### Description
 
-Every PR body must include the following sections. When the PR is opened as a
-draft, also include the draft header block defined in AGENTS.md §2
+Every PR body must include the following sections — except a promotion PR, which
+uses the body given in *Promoting `develop` → `main`* instead. When the PR is
+opened as a draft, also include the draft header block defined in AGENTS.md §2
 (`Plan: / Source: / Status: WIP`) above these sections — the two are
 complementary: the header carries machine-readable status and the plan pointer,
 the sections below carry the human-readable summary.
@@ -286,7 +291,11 @@ Anything non-obvious, risky, or worth extra scrutiny.
 
 ### Before Marking Ready
 
-- [ ] Branch is rebased on latest `develop`
+Run this when converting a draft to ready-for-review — or, on a PR that has no
+draft stage (a trivial change, a promotion), immediately before opening it.
+
+- [ ] Branch is rebased on latest `develop` — does not apply to a promotion PR,
+      whose head *is* `develop`
 - [ ] CI is green — or any failure is understood and explicitly noted in the description
 - [ ] No debug code, commented-out blocks, or stray `console.log` / `print` statements
 - [ ] Description is filled out

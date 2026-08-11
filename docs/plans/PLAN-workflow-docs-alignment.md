@@ -391,7 +391,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       do not silently pick the reading that requires the least editing.
       **Stop here and wait for the maintainer** — commit and push everything
       first, per *Conventions*.
-- [ ] 11. **Apply the maintainer's resolutions** to the documents, then re-run
+- [x] 11. **Apply the maintainer's resolutions** to the documents, then re-run
       task 9's integrity check. Only now are the documents final.
 
 ### Finish
@@ -522,3 +522,61 @@ but contains only `git push -u origin feature/my-change`; the `gh pr create
 --base develop` that *Branch Strategy* now insists on is absent from the one
 place a reader copies commands from. → Recommend adding the command to the
 block.
+
+---
+
+## C2 resolutions
+
+**Maintainer ruled 2026-08-11: all C1 recommendations approved as written.**
+C1-1 and C1-2 were applied first (annotated inline above); C1-3 through C1-8
+followed in task 11. What landed:
+
+| Finding | Applied |
+|---|---|
+| C1-3 | *Before Marking Ready* gains a lead-in — the checklist runs at draft→ready, or immediately before opening when there is no draft stage — and the rebase item is marked not applicable to a promotion PR. |
+| C1-4 | *Description* now exempts a promotion PR, which uses the body from *Promoting `develop` → `main`*. |
+| C1-5 | The §5 skip is now conditional: an issue-driven trivial change still runs the closing transition when its PR opens; a non-issue-driven one touches no labels. §5 gains a matching trivial-path transition block, so the rule is stated on both sides. |
+| C1-6 | The audience note now names the branch-and-PR rule as the exception to the maintainer-only scoping — what an outside contribution skips is the plan file, labels and review ritual, never the PR. |
+| C1-7 | `### Example Commit Messages` repaired from four single-line ` ``` ` spans into one fenced block. |
+| C1-8 | *Daily Workflow* step 4 now carries `gh pr create --draft --base develop`, with the `--base` requirement and the trivial-path `--draft` exception in comments. |
+
+**Fence-count movement is expected here and is not formatter damage:**
+`AGENTS.md` 14 → 16 (C1-5's new `bash` block in §5) and `docs/git-workflow.md`
+42 → 40 (C1-7 replaces four single-line pseudo-fences with one two-line block).
+Both are accounted for; entity scan stays clean.
+
+**C1-5 interacts with the C1-2 resolution.** Because a trivial PR now carries
+`Closes #<N>` from the start, the issue auto-closes on merge — so the label
+transition is what keeps the *state machine* honest, not what closes the issue.
+Both are written down rather than left to interact by accident.
+
+## Open question A.2 — auto-delete of `develop`, confirmed
+
+Re-verified 2026-08-11 against the live repo, since the maintainer asked whether
+`develop` can be lost:
+
+- `develop` is **unprotected** (`branches/develop/protection` → 404) and
+  `rulesets` returns `[]` — there is no ruleset at all yet. It is also not the
+  default branch (`main` is). GitHub's auto-delete skips protected and default
+  branches, so `develop` currently matches neither exemption.
+- **Therefore the exposure is real, not theoretical:** plan for `develop` to be
+  deleted when a promotion PR merges.
+- **No commits can be lost, and this is provable from the last promotion.** The
+  `#32` merge commit `549da73` has parents `f29b108` (main's tip) and `07de96d`
+  (develop's tip at merge time). A promotion merge always records develop's exact
+  tip as parent 2, so after the merge every commit on `develop` is reachable from
+  `main`. Deletion removes a *ref*, never history.
+- Recovery is exact and one command — `git push origin develop` from an
+  up-to-date local clone, or GitHub's **Restore branch** button on the merged PR.
+- `#32` merged 2026-08-07, before `deleteBranchOnMerge` was enabled on
+  2026-08-11, so it provides no evidence either way — the first promotion after
+  this plan lands is the first exposed one.
+
+**Accepted as a side effect**, on the reasoning that the loss is ref-only,
+recovery is exact, and the window is closed permanently by #30. The promotion
+section's post-merge check exists precisely to catch it in that window.
+**Recommended sequencing, which removes the hazard entirely:** apply #30's
+protection to `develop` *before* running the first promotion. Protecting
+`develop` restricts pushes *to* `develop`; a promotion PR has `develop` as head
+and `main` as base, so it is unaffected — while the protection makes `develop`
+exempt from auto-delete.

@@ -9,6 +9,10 @@
 > `mdv` — **except `## Workflow (required)` (§1–§5)**, which is the
 > maintainer's own process (plan files, GitHub label state machine,
 > review ritual) and is not expected of outside contributions.
+> **Two rules inside §1 are the exception to that exception and hold for
+> everyone:** work happens on a branch, and it lands through a PR
+> targeting `develop`. What an outside contribution skips is the plan
+> file, the label workflow and the review ritual — never the PR.
 > Contributing from outside? Start with `CONTRIBUTING.md`.
 
 ---
@@ -84,7 +88,11 @@ A trivial change **keeps**:
 A trivial change **skips**:
 
 - the plan file (step 2 below);
-- the §5 label workflow;
+- the §5 label workflow — with one exception: an **issue-driven** trivial change
+  still runs the closing transition when its PR opens
+  (`gh issue edit <N> --remove-label agent --add-label needs-review`), and the
+  `Closes #<N>` in its PR body closes the issue itself on merge. A trivial change
+  that is not issue-driven touches no labels at all;
 - the §3 test loop;
 - the §2 draft-PR stage and its `Plan: / Source: / Status: WIP` header block;
 - the Finish step (step 5 below), including `/skill:adversarial-review`.
@@ -277,6 +285,12 @@ gh issue comment <N> --body "Decision needed before planning can continue:\n\n- 
 Implementation starts (task 1):
 ```bash
 gh issue edit <N> --add-label "in progress"
+```
+
+Issue-driven **trivial** change (§1) — there is no planning or implementation
+stage to track, so the only transition is the closing one, run when the PR opens:
+```bash
+gh issue edit <N> --remove-label agent --add-label needs-review
 ```
 
 Implementation complete (covered by Finish checklist in plan template):
