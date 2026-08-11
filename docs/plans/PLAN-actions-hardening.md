@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-33-actions-hardening`
 _Date:_ 2026-08-11
-_Status:_ APPROVED
+_Status:_ IN PROGRESS
 _Source:_ #33
 
 ---
@@ -218,7 +218,7 @@ path, then force-drops that commit off the branch.
 
 ### Implementation
 
-- [ ] 0. Create branch `chore/issue-33-actions-hardening` from develop following docs/git-workflow.md
+- [x] 0. Create branch `chore/issue-33-actions-hardening` from develop following docs/git-workflow.md
       **Run this from the primary worktree `/Users/marco/Build/mdv`**, which is
       where `develop` is checked out. Three other worktrees exist on unrelated
       branches (`main-2`, `chore/issue-24-…`, `fix/issue-18-…`); starting from
@@ -231,7 +231,7 @@ path, then force-drops that commit off the branch.
       the issue on merge before the work is verified. `Closes #33` is added only
       at the Finish step, when converting to ready-for-review.
 
-- [ ] 1. **`audit.yml`: replace `rustsec/audit-check` with plain `cargo audit`** (item 1a).
+- [x] 1. **`audit.yml`: replace `rustsec/audit-check` with plain `cargo audit`** (item 1a).
       Drop the `rustsec/audit-check@v2.0.0` step and add three steps in its
       place, in this order:
       1. `dtolnay/rust-toolchain@stable`

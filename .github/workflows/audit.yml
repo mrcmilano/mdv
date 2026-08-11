@@ -33,7 +33,18 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: rustsec/audit-check@v2.0.0
+      # cargo-audit is run directly rather than via rustsec/audit-check, which
+      # publishes through the Checks API and therefore needs `checks: write`.
+      # Fork PRs cap GITHUB_TOKEN at read-only regardless of any `permissions:`
+      # block, so that action would 403 on the first outside contribution that
+      # touches Cargo.lock.
+      - uses: dtolnay/rust-toolchain@stable
         if: steps.lockfile.outputs.changed == 'true'
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-audit
+        if: steps.lockfile.outputs.changed == 'true'
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        if: steps.lockfile.outputs.changed == 'true'
+        run: cargo audit --deny warnings
