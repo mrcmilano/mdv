@@ -276,7 +276,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
 
 **Part B — trivial-change contract**
 
-- [ ] 4. **Rewrite `AGENTS.md:51–61`** (B1). Keep the definition of trivial
+- [x] 4. **Rewrite `AGENTS.md:51–61`** (B1). Keep the definition of trivial
       verbatim (zero logic impact AND limited in scope; when in doubt, treat as
       non-trivial). Replace "commit directly to whichever branch is currently
       checked out. No plan file, no new branch, no PR required" with: branch
@@ -298,7 +298,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       the whole reason this must be a list and not a sentence: a reader who
       infers instead of reading will pull the entire non-trivial ritual back in
       through §2, which defeats the change.
-- [ ] 5. **Reconcile `AGENTS.md:94–96` and cover trivial-change branch naming**
+- [x] 5. **Reconcile `AGENTS.md:94–96` and cover trivial-change branch naming**
       (B2 + B3). Step 3's "This is mandatory — there are no exceptions based on
       scope, triviality, or whether a commit is imminent" was written to close
       the loophole task 4 deletes.

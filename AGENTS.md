@@ -48,17 +48,46 @@ cargo audit                                # run after first build and after any
 
 The required sequence is: **Assess → Plan → Branch → Implement → Finish**. Do not skip or reorder steps.
 
+**Every change is made on a branch created from `develop` and lands through a
+PR. This is mandatory — there are no exceptions based on scope, triviality, or
+whether a commit is imminent.** Both paths below inherit this; they differ only
+in how much process rides on top. Name the branch per `docs/git-workflow.md`:
+`<type>/<short-hyphenated-name>`, with the ticket number appended when one
+exists (`fix/issue-42-login-redirect`). Non-trivial work takes its branch name
+from the plan file (step 2 below); a trivial change has no plan file, so take
+the name straight from that convention.
+
 A change is **trivial** only if it has zero logic impact AND is limited in scope
 (one-liner, typo, `.md` wording). When in doubt, treat as non-trivial.
 
-For **trivial** changes: commit directly to whichever branch is currently checked
-out. No plan file, no new branch, no PR required. Use a clear commit message
-describing the change.
+For **trivial** changes: branch from `develop` and open a PR, but skip the
+planning and review apparatus. The whole cost is **branch → commit → PR →
+merge**, and nothing else.
 
-A trivial change that touches any code file (e.g. a one-line Rust fix) must
-still pass `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
-before committing. Only non-code changes (`.md` wording, comments, docs) skip checks
-entirely. The full test loop (§3) is not required for trivial changes.
+There is no direct-commit path. Work reaches `main` or `develop` through a pull
+request or not at all — enforced by branch protection with no bypass on either
+branch (#30), the maintainer included. So the branch and the PR are not ceremony
+to be re-litigated on a typo fix; they are the only mechanism there is.
+Everything that *is* ceremony is skipped, and both lists below are exhaustive —
+do not carry a step over from the non-trivial path by inference.
+
+A trivial change **keeps**:
+
+- a branch off `develop` (step 3 below — the branch requirement governs every
+  change, trivial or not);
+- a Conventional Commit message describing the change;
+- a PR into `develop`, opened ready-for-review;
+- `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` if it
+  touches any code file (e.g. a one-line Rust fix). Only non-code changes
+  (`.md` wording, comments, docs) skip checks entirely.
+
+A trivial change **skips**:
+
+- the plan file (step 2 below);
+- the §5 label workflow;
+- the §3 test loop;
+- the §2 draft-PR stage and its `Plan: / Source: / Status: WIP` header block;
+- the Finish step (step 5 below), including `/skill:adversarial-review`.
 
 For **non-trivial** work:
 
@@ -92,8 +121,8 @@ For **non-trivial** work:
    the issue is the intent record.
 
 3. **Branch** — once the plan is approved, read `docs/git-workflow.md` in full,
-   then create a new branch from **develop**. This is mandatory — there are no
-   exceptions based on scope, triviality, or whether a commit is imminent.
+   then create the branch from **develop** as required above, using the name
+   given in the plan file.
 
    **First commit on the branch must be the plan file** at
    `docs/plans/PLAN-<feature-name>.md`. Update its status from `DRAFT` to
