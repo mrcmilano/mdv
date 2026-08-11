@@ -404,18 +404,62 @@ The `cancelled` and `skipped` legs of the `contains(...)` condition were not
 separately exercised — an accepted limit of this verification, per task 7.4.
 
 ### Finish
-- [ ] Write / update tests for all implementation tasks above
+- [x] Write / update tests for all implementation tasks above
       (N/A — no durable Rust source changes. Task 7's live CI run is the test;
       note this explicitly rather than silently skipping the checklist item.)
-- [ ] Run full test suite — all tests pass
-- [ ] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
-      (FIX REQUIRED: add tasks to Implementation above and complete them;
-       LOW: document rationale in Deferred findings section below)
-- [ ] Update `README.md` if affected (expected: no change — see Impact assessment)
+      **Confirmed N/A:** the merged diff touches only the two workflow files
+      and this plan. Verification is the four CI runs recorded under task 7.
+- [x] Run full test suite — all tests pass
+      (173 passed, 0 failed; `cargo fmt --check` clean; `cargo clippy
+      --all-targets --locked -- -D warnings` clean. Locally and on all three
+      OS legs in CI.)
+- [x] Run `/skill:adversarial-review` — resolve all FIX REQUIRED findings before proceeding
+      (Verdict PASS — 0 FIX REQUIRED, 3 LOW recorded under Deferred findings.)
+- [x] Update `README.md` if affected (expected: no change — see Impact assessment)
+      **No change needed, as predicted:** `README.md:3-4` badges resolve against
+      the workflow *file paths*, which are unchanged, and their labels match the
+      untouched `name:` keys (`CI`, `Audit`).
 - [ ] Convert draft PR to ready-for-review; add `Closes #33` to PR description;
       set this plan's `_Status:_` to `READY`
 - [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 33 --remove-label agent --remove-label "in progress" --add-label needs-review`
+
+---
+
+## Deferred findings
+
+Both are LOW risk from `/skill:adversarial-review`; neither is FIX REQUIRED.
+
+- **`audit.yml:45` — the lockfile gate degrades silently if `git diff` fails.**
+  `git diff --name-only … | grep -qx "Cargo.lock"` yields the *pipeline's*
+  status, i.e. `grep`'s. A `git diff` failure therefore produces an empty
+  stream, `grep` exits 1, and control reaches `else` → `changed=false`: the
+  audit skips while the job stays green.
+  **Deferred because** the line is pre-existing (unmodified context in this
+  diff) and "Explicit non-changes" above forbids restructuring this gate — a
+  fix means editing code this plan fences off. It is also unreachable in
+  practice: `fetch-depth: 0` guarantees `${{ github.sha }}` is in the local
+  object DB on both the `push` and `pull_request` paths, and `$base_sha` is
+  validated by `git cat-file -e` on the line immediately above. Worth folding
+  into any future change that legitimately reopens this step.
+
+- **The `workflow_dispatch` gate branch (task 2) is CI-unverified at merge
+  time.** It was exercised only by local shell simulation, across all five
+  event/base combinations. GitHub keeps the trigger inert until the workflow
+  file reaches the default branch, so this path cannot run on real
+  infrastructure until a develop→main promotion — this is inherent to task 2,
+  not a gap that more work here could close.
+  **Deferred because** the branch is five lines, its inputs are fully
+  enumerable, and the failure mode is a manual audit that no-ops rather than a
+  false green. Confirm it on the first `workflow_dispatch` run after this
+  reaches `main`.
+
+- **Matrix-leg propagation into `needs.*.result` was not separately
+  exercised.** Task 7.4 broke `fmt`, which is not a matrix job, so the
+  "a matrix job's result aggregates its legs" claim behind task 4 rests on
+  documented behaviour rather than on an observed run. Safe by construction:
+  whichever way `fail-fast` resolves, a failing leg leaves the job result at
+  `failure` or `cancelled`, and the `contains(...)` condition catches both.
 
 ---
 
