@@ -76,7 +76,8 @@ git add -p
 git add path/to/changed_file.py path/to/other_file.py
 git commit -m "feat: add concise description of change"
 
-# 4. Push and open a draft PR targeting develop
+# 4. Push and open the PR targeting develop
+#    (draft on non-trivial work — see Pull Requests > Opening)
 git push -u origin feature/my-change
 ```
 
@@ -250,7 +251,12 @@ This is the highest-consequence mistake in this document. **`git revert` is not 
 
 ### Opening
 
-- **Open a draft PR immediately after the first push** — do not wait until the work is done. This makes the branch visible, triggers CI early, and signals work-in-progress.
+- **Open a draft PR immediately after the first push** — on non-trivial feature
+  work, do not wait until the work is done. This makes the branch visible,
+  triggers CI early, and signals work-in-progress.
+- **Two kinds of PR skip the draft stage** and open ready-for-review: a trivial
+  change (`AGENTS.md` §1) and a promotion PR (*Promoting `develop` → `main`*).
+  Neither has a work-in-progress period to signal.
 - Target branch: **`develop`** — pass `--base develop` explicitly. It is not the
   tool's default; `gh pr create` would open against `main`. See *Branch Strategy*.
 - PR title mirrors the branch intent: `Add user authentication`, `Fix login redirect`.
@@ -270,8 +276,9 @@ One or two sentences on what changed.
 ## Why
 The motivation or ticket reference. Do **not** write `closes #<N>` / `Closes #<N>`
 while the PR is a draft — a closing keyword auto-closes the issue on merge before
-the work is verified. Reference the issue as `ref #<N>` until the PR is converted
-to ready-for-review, then add `Closes #<N>` (see AGENTS.md §2).
+the work is verified. Reference the issue as `ref #<N>` for as long as the PR is
+a draft, and add `Closes #<N>` when it is converted to ready-for-review — or from
+the start on a PR that has no draft stage (see AGENTS.md §2).
 
 ## Notes for reviewer
 Anything non-obvious, risky, or worth extra scrutiny.

@@ -171,6 +171,12 @@ For **non-trivial** work:
 
 ### 2. Git workflow
 
+**Scope:** the draft-PR stage below is for **non-trivial work**. A trivial
+change (§1) opens its PR ready-for-review, so it skips the draft stage and the
+`Plan: / Source: / Status: WIP` header block — and may carry `Closes #<N>` from
+the start, since there is no later conversion at which to add it. Everything
+from **Before any subsequent git operation** onward applies to both paths.
+
 **After the first push on a new branch**, open a draft PR targeting `develop`
 immediately — do not wait until the work is complete. The draft PR description
 must contain:
@@ -181,9 +187,10 @@ Source: #<issue-number>         ← omit if not issue-driven
 Status: WIP — do not review yet
 ```
 
-Do **not** add `Closes #<N>` to the PR description until converting to
-ready-for-review. Adding it to a draft PR will auto-close the issue on merge
-before the work is verified complete.
+Do **not** add `Closes #<N>` to the PR description while it is a draft — on
+merge it would auto-close the issue before the work is verified complete. Add it
+when the PR is converted to ready-for-review, or at open time on a PR that has
+no draft stage (see the scope note above).
 
 **Before any subsequent git operation** — committing, pushing, opening a PR,
 updating a branch, or handling a merge — consult the relevant section of

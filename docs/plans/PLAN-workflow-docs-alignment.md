@@ -440,6 +440,9 @@ unconditional, and now contradicts `AGENTS.md` §1, where a trivial change opens
 ready-for-review, and also the promotion PR, which has no WIP stage. → Recommend
 qualifying the bullet: it governs non-trivial feature work, with a pointer to
 the two exceptions.
+**RESOLVED 2026-08-11 — maintainer approved; applied in task 11.** The bullet
+now reads "on non-trivial feature work", followed by a bullet naming both
+exceptions (trivial changes, promotion PRs) as opening ready-for-review.
 
 **C1-2 — `AGENTS.md` §2 states the same rule unconditionally from the other
 side.** §2 opens "After the first push on a new branch, open a draft PR
@@ -448,6 +451,31 @@ but a reader who lands in §2 directly — which §1 step 4 and
 `docs/git-workflow.md` both invite — never sees that. This is the exact failure
 mode Open question 5 warns about, reintroduced one section later. → Recommend a
 scope line at the top of §2 pointing back to §1's trivial path.
+**RESOLVED 2026-08-11 — maintainer approved; applied in task 11.** §2 now opens
+with a **Scope:** paragraph scoping the draft stage to non-trivial work and
+stating what the trivial path does instead, including where §2 stops being
+path-specific (*Before any subsequent git operation* onward applies to both).
+
+**Consequential edits made under the same resolution**, because leaving them
+would have reintroduced the ambiguity the resolution exists to remove. Each is
+forced by the decision, not an independent finding:
+
+- `AGENTS.md` §2's `Closes #<N>` rule read "not until converting to
+  ready-for-review", which presumes a conversion a trivial PR never makes.
+  Reworded to key off *being a draft*, with the no-draft-stage case stated.
+- `docs/git-workflow.md` *Description* → `## Why` carried the same presumption
+  ("until the PR is converted … then add `Closes #<N>`"). Same rewording.
+- `docs/git-workflow.md` *Daily Workflow* step 4 was the third site asserting
+  "open a draft PR" unconditionally. Now "open the PR … (draft on non-trivial
+  work — see Pull Requests > Opening)". This touches the block C1-8 proposes to
+  extend with a `gh pr create` line; the two edits do not conflict.
+
+**Post-resolution sweep.** Every remaining mention of a draft PR,
+ready-for-review or `Closes` across the three documents is now either
+conditional on the PR actually being a draft, or explicitly scoped to one path:
+`AGENTS.md:79,89,155,174–178,180–181,190–193,239` and
+`docs/git-workflow.md:80,97,100,254,257,267,277–281,297`. No site states the
+draft rule unconditionally.
 
 **C1-3 — *Before Marking Ready* has no moment to run on a trivial PR, and one
 item is wrong for a promotion PR.** A trivial PR opens ready-for-review, so a
