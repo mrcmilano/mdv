@@ -2,7 +2,7 @@
 
 _Branch:_ `chore/issue-33-actions-hardening`
 _Date:_ 2026-08-11
-_Status:_ IN PROGRESS
+_Status:_ READY
 _Source:_ #33
 
 ---
@@ -419,9 +419,9 @@ separately exercised — an accepted limit of this verification, per task 7.4.
       **No change needed, as predicted:** `README.md:3-4` badges resolve against
       the workflow *file paths*, which are unchanged, and their labels match the
       untouched `name:` keys (`CI`, `Audit`).
-- [ ] Convert draft PR to ready-for-review; add `Closes #33` to PR description;
+- [x] Convert draft PR to ready-for-review; add `Closes #33` to PR description;
       set this plan's `_Status:_` to `READY`
-- [ ] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
+- [x] Remove `agent` and `in progress` labels; add `needs-review` label on source issue
       `gh issue edit 33 --remove-label agent --remove-label "in progress" --add-label needs-review`
 
 ---
