@@ -201,16 +201,27 @@ gh pr create --base main --head fix/revert-merge-onto-main \
   --title "Revert merge onto main" \
   --body-file <scratch-file>
 
-# 4. Once it is merged, verify main is clean
+# 4. Once it is merged, verify main is clean — compare main against the state
+#    it was in before the bad merge landed, which is that merge's FIRST parent.
+#    Empty means the revert restored main exactly.
 git fetch origin
 git log --oneline -5 origin/main
-git diff origin/develop origin/main
+git diff <merge-commit-sha>^1 origin/main   # expect empty
+
+#    Not empty? Something else landed on main after the bad merge. Inspect
+#    what, and why it is on main at all, before reverting anything further.
 
 # 5. The feature branch is untouched — open a new PR targeting develop
 git checkout feature/your-branch
 ```
 
 > `-m 1` is required for merge commits. It tells git which parent to restore: `1` is the branch merged *into* (`main`), `2` is the branch merged *from*. Without it, git cannot determine which side to revert to.
+
+> **Do not verify step 4 with `git diff origin/develop origin/main`.** `main`
+> legitimately lags `develop` between promotions, so that diff is non-empty in
+> normal operation and says nothing about whether the revert worked. An empty
+> `main`↔`develop` diff is the success condition for a **promotion** (see
+> *Promoting `develop` → `main`*), not for a revert.
 
 ### Branched from Wrong Base (e.g. from `main` instead of `develop`)
 

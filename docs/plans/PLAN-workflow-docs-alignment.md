@@ -462,13 +462,22 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       `main`; and the *Solo-workflow rule*'s inline example list was replaced
       with a pointer to *Opening*, so the enumeration lives in exactly one place
       and cannot drift again.
+      **F6 (fixed in the same pass, maintainer requested).** The revert recipe's
+      step 4 verified "main is clean" with `git diff origin/develop origin/main`
+      and stated no expected result — a check that is legitimately non-empty
+      whenever `main` lags `develop`, which is normal operation, and which the
+      promotion section's "expect empty" framing invites a reader to
+      misinterpret. Replaced with `git diff <merge-commit-sha>^1 origin/main`,
+      which compares `main` against the state it was in before the bad merge
+      landed and is exactly empty when the revert succeeded, plus the
+      not-empty case. A note under the block rules the `develop`↔`main` diff out
+      explicitly and names it as the *promotion* success condition instead.
+      Verified against the real `#32` merge: `git rev-parse 549da73^1` →
+      `f29b108`.
       **Deliberately not changed:** F7 (the documents state branch protection as
       live; `rulesets` is `[]` and both branches return 404 today). This is the
       maintainer-approved resolution to Open question 6 — the wording is applied
-      when #30 lands, not before. F6 (`:201`'s `git diff origin/develop
-      origin/main` "verify main is clean" has no stated expectation and is
-      legitimately non-empty whenever `main` is behind `develop`) was reported as
-      low and left for a separate change.
+      when #30 lands, not before.
 
 ### Finish
 - [x] Write / update tests for all implementation tasks above
