@@ -258,7 +258,7 @@ path, then force-drops that commit off the branch.
       Do **not** substitute `taiki-e/install-action`: it trades one third-party
       action for another and reopens the pinning question.
 
-- [ ] 2. **`audit.yml`: add `workflow_dispatch:` with an explicit gate branch.**
+- [x] 2. **`audit.yml`: add `workflow_dispatch:` with an explicit gate branch.**
       Confirmed in scope during plan review — implement it, do not skip it.
       Rationale: it provides an on-demand audit after a manual `cargo update`,
       which is exactly the step `AGENTS.md` prescribes but can only ask the

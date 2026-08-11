@@ -5,6 +5,8 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # On-demand audit, for use after a manual `cargo update` (AGENTS.md).
+  workflow_dispatch:
 
 jobs:
   audit:
@@ -17,7 +19,12 @@ jobs:
       - name: Check for Cargo.lock changes
         id: lockfile
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # A manual dispatch always audits — there is no base commit to
+            # diff against, and the point of dispatching is to audit now.
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             base_sha="${{ github.event.pull_request.base.sha }}"
           else
             base_sha="${{ github.event.before }}"
