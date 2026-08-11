@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Reading the repository is all this workflow needs; every job reports through
+# its own exit status rather than writing back to the repository.
+permissions:
+  contents: read
+
 jobs:
   fmt:
     runs-on: ubuntu-latest

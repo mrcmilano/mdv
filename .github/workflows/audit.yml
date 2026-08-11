@@ -8,6 +8,11 @@ on:
   # On-demand audit, for use after a manual `cargo update` (AGENTS.md).
   workflow_dispatch:
 
+# Reading the repository is all this workflow needs; cargo audit reports
+# through the job's exit status, not the Checks or Pull Requests APIs.
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest

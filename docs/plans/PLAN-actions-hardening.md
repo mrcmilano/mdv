@@ -293,7 +293,7 @@ path, then force-drops that commit off the branch.
       would silently turn manual audits into no-ops. Keep the existing fallback
       in place for the `push`/`pull_request` paths; it is still correct there.
 
-- [ ] 3. **Both workflows: declare `permissions: contents: read`** (items 4a, 4b).
+- [x] 3. **Both workflows: declare `permissions: contents: read`** (items 4a, 4b).
       Workflow level (top-level key, above `jobs:`) — not per-job. With task 1
       done this is all either workflow needs.
       For the implementer's understanding only, nothing to write down: this
