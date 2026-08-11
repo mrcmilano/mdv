@@ -10,9 +10,10 @@
 > maintainer's own process (plan files, GitHub label state machine,
 > review ritual) and is not expected of outside contributions.
 > **Two rules inside §1 are the exception to that exception and hold for
-> everyone:** work happens on a branch, and it lands through a PR
-> targeting `develop`. What an outside contribution skips is the plan
-> file, the label workflow and the review ritual — never the PR.
+> everyone:** work happens on a branch, and it lands through a PR.
+> What an outside contribution skips is the plan file, the label
+> workflow and the review ritual — never the PR. (An outside PR targets
+> `develop` — see `CONTRIBUTING.md`.)
 > Contributing from outside? Start with `CONTRIBUTING.md`.
 
 ---
@@ -53,13 +54,22 @@ cargo audit                                # run after first build and after any
 The required sequence is: **Assess → Plan → Branch → Implement → Finish**. Do not skip or reorder steps.
 
 **Every change is made on a branch created from `develop` and lands through a
-PR. This is mandatory — there are no exceptions based on scope, triviality, or
-whether a commit is imminent.** Both paths below inherit this; they differ only
-in how much process rides on top. Name the branch per `docs/git-workflow.md`:
-`<type>/<short-hyphenated-name>`, with the ticket number appended when one
-exists (`fix/issue-42-login-redirect`). Non-trivial work takes its branch name
-from the plan file (step 2 below); a trivial change has no plan file, so take
-the name straight from that convention.
+PR into `develop`. This is mandatory — there are no exceptions based on scope,
+triviality, or whether a commit is imminent.** Both paths below inherit this;
+they differ only in how much process rides on top. Name the branch per
+`docs/git-workflow.md`: `<type>/<short-hyphenated-name>`, with the ticket number
+appended when one exists (`fix/issue-42-login-redirect`). Non-trivial work takes
+its branch name from the plan file (step 2 below); a trivial change has no plan
+file, so take the name straight from that convention.
+
+Exactly two PRs in this repo target `main` instead, and neither is ordinary
+work: a **promotion**, whose head *is* `develop` and which merges work that
+already landed here rather than introducing any; and a **revert of a merge that
+reached `main` by mistake**, which branches from `main` because that is the
+history it repairs. Both are run per `docs/git-workflow.md` (*Promoting
+`develop` → `main`* and *PR Merged onto the Wrong Branch*). Nothing else targets
+`main`, and neither is an exception to the branch-and-PR rule itself — both
+still go through a PR.
 
 A change is **trivial** only if it has zero logic impact AND is limited in scope
 (one-liner, typo, `.md` wording). When in doubt, treat as non-trivial.
@@ -77,8 +87,9 @@ do not carry a step over from the non-trivial path by inference.
 
 A trivial change **keeps**:
 
-- a branch off `develop` (step 3 below — the branch requirement governs every
-  change, trivial or not);
+- a branch off `develop`, named per the branch rule at the top of this section —
+  it governs every change, trivial or not, and is where a trivial change gets
+  its name, since step 3 below draws the name from a plan file it does not have;
 - a Conventional Commit message describing the change;
 - a PR into `develop`, opened ready-for-review;
 - `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` if it
@@ -179,11 +190,14 @@ For **non-trivial** work:
 
 ### 2. Git workflow
 
-**Scope:** the draft-PR stage below is for **non-trivial work**. A trivial
-change (§1) opens its PR ready-for-review, so it skips the draft stage and the
-`Plan: / Source: / Status: WIP` header block — and may carry `Closes #<N>` from
-the start, since there is no later conversion at which to add it. Everything
-from **Before any subsequent git operation** onward applies to both paths.
+**Scope:** the draft-PR stage below is for **non-trivial work on a feature
+branch**. A trivial change (§1) opens its PR ready-for-review, so it skips the
+draft stage and the `Plan: / Source: / Status: WIP` header block — and may carry
+`Closes #<N>` from the start, since there is no later conversion at which to add
+it. The two `main`-targeting PRs named in §1 — a promotion and a revert of a bad
+merge — open ready-for-review for the same reason and carry no header block
+either; `docs/git-workflow.md` governs both. Everything from **Before any
+subsequent git operation** onward applies to every path.
 
 **After the first push on a new branch**, open a draft PR targeting `develop`
 immediately — do not wait until the work is complete. The draft PR description

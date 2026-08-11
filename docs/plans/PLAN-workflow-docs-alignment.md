@@ -424,6 +424,52 @@ task 10 so the maintainer rules on them alongside the C1 findings.
       against the real `#32` merge: `git rev-parse 549da73^2` → `07de96d`, and
       `^2` fails closed on a non-merge tip.
 
+- [x] 13. **Added by `/skill:pre-merge-code-review` (F1–F5, maintainer approved
+      2026-08-11).** Five findings, all created by this branch:
+      - **F1 — `AGENTS.md` forbade the promotion PR this branch introduces.** The
+        audience note (`:12–15`) and §1 (`:55–56`) asserted, without exception,
+        that work lands through a PR *targeting `develop`* from a branch *created
+        from `develop`* — which the promotion PR (head `develop`, base `main`)
+        does not satisfy, and `AGENTS.md` never mentioned promotion at all. Task
+        8's C1 checklist required the documents to "agree on which branch is the
+        base … for promotion"; they did not. Fixed at all three sites: the
+        audience note drops the false absolute (outside PRs still target
+        `develop`, per `CONTRIBUTING.md`), §1 gains a paragraph naming the
+        `main`-targeting PRs, and §2's Scope names them as no-draft paths.
+      - **F2 — `docs/git-workflow.md` contradicted itself.** `:59` said "the one
+        PR that legitimately targets `main` is a promotion"; `:195`, added by
+        task 2 in this same branch, opens a revert PR with `--base main`. Both
+        `:59` and F1's new `AGENTS.md` paragraph now name **two**
+        `main`-targeting PRs — promotion and revert-of-a-bad-merge.
+      - **F3 — the revert recipe omitted the body argument this branch made
+        mandatory.** `:81–84` added "Always pass `--body-file`: without a body
+        argument `gh` opens an editor, which blocks an autonomous agent", while
+        the revert `gh pr create` passed only `--title`. Now passes
+        `--body-file`.
+      - **F4 — *Before Marking Ready* contradicted itself within three
+        sentences:** "**Not before opening:**" followed by "and the rest before
+        you open it". The bold clause was meant to scope only the CI item;
+        reworded to say so.
+      - **F5 — the trivial keeps-list pointed into non-trivial-only text.** It
+        sent the reader to "step 3 below" for the branch requirement, but step 3
+        now reads "using the name given in the plan file" — which a trivial
+        change does not have. It now points at §1's universal branch rule, where
+        trivial branch naming actually lives.
+      **Consequential edits forced by F2**, not independent findings: *Opening*
+      now lists **three** kinds of PR that skip the draft stage (the revert PR
+      opens ready-for-review and always did); the *Before Marking Ready* rebase
+      item exempts both `main`-targeting PRs, since a revert must stay based on
+      `main`; and the *Solo-workflow rule*'s inline example list was replaced
+      with a pointer to *Opening*, so the enumeration lives in exactly one place
+      and cannot drift again.
+      **Deliberately not changed:** F7 (the documents state branch protection as
+      live; `rulesets` is `[]` and both branches return 404 today). This is the
+      maintainer-approved resolution to Open question 6 — the wording is applied
+      when #30 lands, not before. F6 (`:201`'s `git diff origin/develop
+      origin/main` "verify main is clean" has no stated expectation and is
+      legitimately non-empty whenever `main` is behind `develop`) was reported as
+      low and left for a separate change.
+
 ### Finish
 - [x] Write / update tests for all implementation tasks above
       — **not applicable: documentation only, no code changes.** State this

@@ -56,8 +56,9 @@ Append ticket number when one exists (`feature/issue-42-user-auth`).
 >   *Branched from Wrong Base* to recover.
 > - `gh pr create` targets the default branch when `--base` is omitted, so
 >   **every PR for feature work needs `--base develop` passed explicitly.**
->   (The one PR that legitimately targets `main` is a promotion — see
->   *Promoting `develop` → `main`*.)
+>   (Exactly two PRs legitimately target `main`: a promotion — see *Promoting
+>   `develop` → `main`* — and a revert of a merge that landed on `main` by
+>   mistake, see *PR Merged onto the Wrong Branch*.)
 
 ---
 
@@ -106,9 +107,10 @@ Prefer rebase over merge to keep history linear.
 **Solo-workflow rule:** rebase freely while the PR is still a draft, or before
 it is opened at all — there are no reviewers whose inline comments could be
 displaced, so the "do not rewrite history" guard below does not yet apply. Once
-the PR is ready-for-review (whether converted to it or opened that way, as a
-trivial change and a promotion are) or any reviewer leaves an inline comment,
-stop rewriting history and follow *Responding to Review Feedback*.
+the PR is ready-for-review — whether converted to it or opened that way, as the
+three PR kinds listed under *Pull Requests > Opening* are — or any reviewer
+leaves an inline comment, stop rewriting history and follow *Responding to
+Review Feedback*.
 
 ---
 
@@ -191,9 +193,13 @@ git checkout -b fix/revert-merge-onto-main
 git revert -m 1 <merge-commit-sha>
 git push -u origin fix/revert-merge-onto-main
 
-# 3. Open the revert PR against main
+# 3. Open the revert PR against main — ready-for-review, not a draft.
+#    --body-file is required: with no body argument gh opens an editor,
+#    which blocks an autonomous agent. Write the What/Why/Notes body
+#    (see Pull Requests > Description) to a scratch file first.
 gh pr create --base main --head fix/revert-merge-onto-main \
-  --title "Revert merge onto main"
+  --title "Revert merge onto main" \
+  --body-file <scratch-file>
 
 # 4. Once it is merged, verify main is clean
 git fetch origin
@@ -264,9 +270,10 @@ This is the highest-consequence mistake in this document. **`git revert` is not 
 - **Open a draft PR immediately after the first push** — on non-trivial feature
   work, do not wait until the work is done. This makes the branch visible,
   triggers CI early, and signals work-in-progress.
-- **Two kinds of PR skip the draft stage** and open ready-for-review: a trivial
-  change (`AGENTS.md` §1) and a promotion PR (*Promoting `develop` → `main`*).
-  Neither has a work-in-progress period to signal.
+- **Three kinds of PR skip the draft stage** and open ready-for-review: a
+  trivial change (`AGENTS.md` §1), a promotion PR (*Promoting `develop` →
+  `main`*), and a revert of a merge that landed on `main` by mistake (*PR Merged
+  onto the Wrong Branch*). None has a work-in-progress period to signal.
 - Target branch: **`develop`** — pass `--base develop` explicitly. It is not the
   tool's default; `gh pr create` would open against `main`. See *Branch Strategy*.
 - PR title mirrors the branch intent: `Add user authentication`, `Fix login redirect`.
@@ -298,14 +305,15 @@ Anything non-obvious, risky, or worth extra scrutiny.
 ### Before Marking Ready
 
 Run this when converting a draft to ready-for-review — or, on a PR that has no
-draft stage (a trivial change, a promotion), before merging it. **Not before
-opening:** no workflow runs until the PR exists, since CI triggers on
-`pull_request` and on pushes to `main`/`develop` only — never on a push to a
-feature branch. On a no-draft PR the last item is therefore checked on the open
-PR, and the rest before you open it.
+draft stage (a trivial change, a promotion, a revert onto `main`), before
+merging it. **The CI item is the exception to that timing:** no workflow runs
+until the PR exists, since CI triggers on `pull_request` and on pushes to
+`main`/`develop` only — never on a push to a feature branch. So on a no-draft
+PR, check every other item before you open it, and the CI item once it is open.
 
-- [ ] Branch is rebased on latest `develop` — does not apply to a promotion PR,
-      whose head *is* `develop`
+- [ ] Branch is rebased on latest `develop` — does not apply to the two
+      `main`-targeting PRs: a promotion's head *is* `develop`, and a revert onto
+      `main` must stay based on `main`
 - [ ] No debug code, commented-out blocks, or stray `console.log` / `print` statements
 - [ ] Description is filled out
 - [ ] CI is green — or any failure is understood and explicitly noted in the
