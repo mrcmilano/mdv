@@ -351,7 +351,7 @@ path, then force-drops that commit off the branch.
       future change reintroducing it while chasing an unrelated permission
       error.
 
-- [ ] 7. **Verify against a live CI run** — the substantive verification step
+- [x] 7. **Verify against a live CI run** — the substantive verification step
       for this plan, since no Rust code changed.
       1. Confirm all jobs are green on the draft PR: `fmt`, `clippy` ×3,
          `test` ×3, `ci-success`, `audit`.
@@ -390,6 +390,18 @@ path, then force-drops that commit off the branch.
          are **not** separately exercised — that is an accepted limit of this
          verification, not an oversight to go chase.
       Record the observed run URLs in the PR description.
+
+#### Task 7 observed results
+
+| Sub-step | Run | Observed |
+|---|---|---|
+| 7.1 / 7.2 green path | [CI 31489461055](https://github.com/mrcmilano/mdv/actions/runs/31489461055), [Audit 31489461092](https://github.com/mrcmilano/mdv/actions/runs/31489461092) | All 9 check runs pass. `ci-success` appears under exactly that name; `audit` likewise. |
+| Gate skips on this PR | [Audit 31488934058](https://github.com/mrcmilano/mdv/actions/runs/31488934058) | `dtolnay/rust-toolchain`, `Install cargo-audit`, `Run cargo audit` all **skipped** — correct, no `Cargo.lock` change, and confirms a green `audit` here proves nothing about task 1. |
+| 7.3 audit path forced open | [Audit 31489014892](https://github.com/mrcmilano/mdv/actions/runs/31489014892) | All three steps **ran and passed**. `cargo audit --deny warnings` loaded 1211 advisories and scanned 42 crate dependencies clean. Commit force-dropped; steps confirmed skipping again. |
+| 7.4 `ci-success` red path | [CI 31489352519](https://github.com/mrcmilano/mdv/actions/runs/31489352519) | `fmt: failure` → `ci-success: **failure**` — not success, not skipped. Commit force-dropped; CI back to green. |
+
+The `cancelled` and `skipped` legs of the `contains(...)` condition were not
+separately exercised — an accepted limit of this verification, per task 7.4.
 
 ### Finish
 - [ ] Write / update tests for all implementation tasks above
