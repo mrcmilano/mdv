@@ -351,7 +351,7 @@ task 10 so the maintainer rules on them alongside the C1 findings.
 
 **Part C — consistency review**
 
-- [ ] 8. **Read the three changed documents end to end** (C1) and produce a
+- [x] 8. **Read the three changed documents end to end** (C1) and produce a
       written findings list. Check specifically that:
       - no rule contradicts another rule in the same or another document;
       - no cross-reference points at a section that has moved, been renumbered,
@@ -418,3 +418,79 @@ task 10 so the maintainer rules on them alongside the C1 findings.
 - [ ] **After merge, note in #30 that its `#35` prerequisite is satisfied** —
       #30 is the only consumer of this issue and its checklist is gated on it.
       The promotion PR comes first; task 1's new section is what runs it.
+
+---
+
+## C1 findings
+
+Produced by task 8, after tasks 1–7 landed. Read end to end: `AGENTS.md`,
+`docs/git-workflow.md`, `CONTRIBUTING.md`. Every finding is carried into the
+task 10 batch with the recommended resolution; none is applied unilaterally.
+
+**Cross-references verified clean.** No `§` heading, `§1` step number or section
+title changed. `docs/git-workflow.md:22` ("AGENTS.md §1 step 4"), `:261` and
+`:274` ("§2"), `docs/plans/PLAN-template.md:6,68` ("§5"), and `AGENTS.md`'s own
+`§2/§3/§5` citations all still resolve. `docs/git-conflict-resolution.md` and
+`README.md` contain no rule touched by this branch. This confirms rather than
+finds, as the plan predicted.
+
+**C1-1 — `docs/git-workflow.md` *Pull Requests > Opening* still mandates a draft
+PR for every PR.** "Open a draft PR immediately after the first push" is
+unconditional, and now contradicts `AGENTS.md` §1, where a trivial change opens
+ready-for-review, and also the promotion PR, which has no WIP stage. → Recommend
+qualifying the bullet: it governs non-trivial feature work, with a pointer to
+the two exceptions.
+
+**C1-2 — `AGENTS.md` §2 states the same rule unconditionally from the other
+side.** §2 opens "After the first push on a new branch, open a draft PR
+targeting `develop` immediately". §1's skip-list says the trivial path skips it,
+but a reader who lands in §2 directly — which §1 step 4 and
+`docs/git-workflow.md` both invite — never sees that. This is the exact failure
+mode Open question 5 warns about, reintroduced one section later. → Recommend a
+scope line at the top of §2 pointing back to §1's trivial path.
+
+**C1-3 — *Before Marking Ready* has no moment to run on a trivial PR, and one
+item is wrong for a promotion PR.** A trivial PR opens ready-for-review, so a
+checklist keyed to the draft→ready transition never fires; and "Branch is
+rebased on latest `develop`" is meaningless for a promotion PR whose head *is*
+`develop`. → Recommend: state that the checklist runs before opening when there
+is no draft stage, and exempt promotion PRs from the rebase item.
+
+**C1-4 — Which PR body does a promotion PR use?** *Pull Requests > Description*
+says "Every PR body must include the following sections" (What / Why / Notes for
+reviewer); the new promotion section supplies its own body template that
+deliberately does not. Both are mandatory as written. → Recommend the promotion
+template win for promotion PRs, said explicitly in one of the two places.
+
+**C1-5 — An issue-driven trivial change leaves its issue with no terminal
+state.** The skip-list drops the §5 label workflow wholesale, so a trivial fix
+raised from an issue never clears `agent` and never reaches `needs-review`; the
+issue stays open in the state machine forever. The §5 table has no trivial-path
+row. → Recommend the trivial path skip §5 only for non-issue-driven work, and
+otherwise still run the closing transition (`--remove-label agent --add-label
+needs-review`) when the PR opens.
+
+**C1-6 — the audience note now scopes the branch-and-PR mandate as
+maintainer-only.** `AGENTS.md:8–12` says `## Workflow (required)` (§1–§5) is the
+maintainer's own process and "not expected of outside contributions" — but §1
+is now also where the universal "every change is made on a branch and lands
+through a PR" rule lives. An external reader can correctly conclude the PR
+requirement does not apply to them. `CONTRIBUTING.md` covers them in practice,
+so this is a reading hazard rather than a live failure. → Recommend the audience
+note distinguish the universal branch/PR rule from the plan-file and label
+ritual that genuinely is maintainer-only.
+
+**C1-7 — pre-existing formatter damage at `docs/git-workflow.md:11–14`.** The
+four example commit messages are single-line ` ```…``` ` spans rather than one
+fenced block — the same collapse pattern the Risks section attributes to the
+editor-side formatter. Present on `develop`, so not caused by this branch, and
+formatter-hunting is out of scope; the damage itself sits in a document this
+task is auditing. → Recommend repairing it into a single fenced block as part of
+task 11.
+
+**C1-8 (minor) — *Daily Workflow* step 4 never shows the command its own warning
+requires.** The step is commented "Push and open a draft PR targeting develop"
+but contains only `git push -u origin feature/my-change`; the `gh pr create
+--base develop` that *Branch Strategy* now insists on is absent from the one
+place a reader copies commands from. → Recommend adding the command to the
+block.
