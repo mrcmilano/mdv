@@ -301,7 +301,7 @@ path, then force-drops that commit off the branch.
       cap allows, so do not expect this task to change fork behaviour — the two
       are independent fixes that happen to touch adjacent lines.
 
-- [ ] 4. **`ci.yml`: add the `ci-success` aggregate job** (item 3a).
+- [x] 4. **`ci.yml`: add the `ci-success` aggregate job** (item 3a).
       The **job id must be the literal string `ci-success`** — that id is what
       becomes the check-run name, and #30 will require it by exact name. Do not
       use a different id with a `name:` override, and do not add a `name:` key
