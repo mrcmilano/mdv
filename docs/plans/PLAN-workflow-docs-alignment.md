@@ -603,6 +603,39 @@ task 10 so the maintainer rules on them alongside the C1 findings.
         Open question 6 / task 13 F7 resolution, which had left the assertion
         standing.
 
+- [x] 16. **Added by a confirmation re-run of `/skill:pre-merge-code-review`
+      over task 15 (R1–R3).** The re-run executed both rewritten command
+      sequences verbatim in throwaway repos rather than re-reading them. F2's
+      restore sequence and F1's step-5 recovery both **verified correct
+      end-to-end** — the redo branch reaches `main` through a normal promotion,
+      the post-merge `git diff origin/main origin/develop` is empty, and the
+      restore picks `develop`'s true tip in exactly the case where the old
+      `origin/main^2` form picked the wrong commit. Three defects **in task 15's
+      own edits** were found and fixed:
+      - **R3 (FIX REQUIRED) — the precondition-2 whitelist understated the
+        residue and would have reproduced the false alarm it was written to
+        remove.** Task 15 said "**the one** legitimate non-merge commit on
+        `main`… is a revert". Executing the full repair shows **three**: the
+        revert *plus every original commit of the mis-merged feature*, which
+        reached `main` through the bad merge and, because the recovery re-lands
+        that work under new SHAs, are never on `develop`. The count grows with
+        the size of the mis-merged feature. Reworded to name the whole residue
+        set, to state that it is permanent, and to demote this check to a
+        heuristic whose authority is precondition 1's content diff.
+      - **R2 (medium) — step 5 sent the reader after a branch that no longer
+        exists.** It said to rebuild from a local ref or the "Restore branch"
+        button, then never used the branch: the commands needed SHAs. Replaced
+        the `<first-sha>^..<last-sha>` placeholders with
+        `<merge-commit-sha>^1..<merge-commit-sha>^2`, which is exactly the range
+        the bad merge brought in and is derived from the SHA the recipe already
+        has in hand at step 1. Verified on a two-commit feature branch. Also
+        removes the root-commit edge case in the old `^` form.
+      - **R1 (low) — the new audience note was over-absolute.** "Everything here
+        applies to anyone working on `mdv`" made *Promoting `develop` → `main`*
+        and *PR Merged onto the Wrong Branch* read as contributor-facing; both
+        are maintainer procedures. Now scoped to the branch/commit/PR
+        conventions, with the two procedure sections named as maintainer-only.
+
 ### Finish
 - [x] Write / update tests for all implementation tasks above
       — **not applicable: documentation only, no code changes.** State this

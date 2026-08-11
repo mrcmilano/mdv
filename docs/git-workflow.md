@@ -1,10 +1,12 @@
 # Git Workflow Instructions
 
-> **Audience:** everything here applies to anyone working on `mdv`, including
-> outside contributors. Two points are specific to a PR opened from a **fork**:
-> whether to open it as a draft is the contributor's own call, and the
-> "CI is green" item under *Pull Requests > Before Marking Ready* cannot be
-> satisfied by the contributor alone — fork workflows do not run until a
+> **Audience:** the branch, commit and PR conventions here apply to anyone
+> working on `mdv`, including outside contributors. Two sections are maintainer
+> procedures that a contributor never runs: *Promoting `develop` → `main`* and
+> *PR Merged onto the Wrong Branch*. Two further points differ for a PR opened
+> from a **fork**: whether to open it as a draft is the contributor's own call,
+> and the "CI is green" item under *Pull Requests > Before Marking Ready* cannot
+> be satisfied by the contributor alone — fork workflows do not run until a
 > maintainer approves them. See `CONTRIBUTING.md`.
 
 ## Core Principles
@@ -237,11 +239,11 @@ git diff <merge-commit-sha>^1 <merge-commit-sha>   # what the bad merge added
 
 # 5. Re-land the feature on develop — with FRESH commits. See the note below:
 #    re-merging the original commits leaves main without the feature forever.
-#    The remote copy of the branch is gone (this repo deletes head branches on
-#    merge, and the bad merge did exactly that), so rebuild from your local ref
-#    or from the merged PR's "Restore branch" button.
+#    Do not go looking for the original branch: this repo deletes head branches
+#    on merge and the bad merge did exactly that. Take the commits from the bad
+#    merge itself — ^1..^2 is precisely the range it brought in.
 git fetch origin && git checkout -b feature/your-branch-redo origin/develop
-git cherry-pick <first-sha>^..<last-sha>    # the original branch's commits
+git cherry-pick <merge-commit-sha>^1..<merge-commit-sha>^2
 git log --oneline origin/develop..HEAD      # SHAs must differ from the originals
 git push -u origin feature/your-branch-redo
 ```
@@ -466,13 +468,20 @@ model works, and it is **not** divergence. A **non-merge** commit on `main` is
 normally divergence: something landed there directly. That needs re-planning,
 not force-merging. Stop and escalate.
 
-**The one legitimate non-merge commit on `main`** is a revert produced by *PR
-Merged onto the Wrong Branch*. It undoes a merge that should never have landed,
-`develop` never sees it, and it stays on `main` permanently — so once one exists
-this check is non-empty on **every** promotion from then on. Identify it by
-message and confirm it is exactly that revert and nothing else; then proceed.
-Treating it as divergence would block every future promotion on a false alarm.
-Anything else in the list is real divergence — stop and escalate.
+**Repairing a wrong-branch merge leaves permanent residue here, and it is not
+divergence.** Once *PR Merged onto the Wrong Branch* has run, `main` carries
+non-merge commits `develop` will never have: every original commit of the
+mis-merged feature — they reached `main` through the bad merge and were never on
+`develop` — plus the revert that neutralised them. The recovery re-lands that
+work on `develop` under *new* SHAs, so the originals stay on `main` forever.
+This check is therefore non-empty on **every** promotion from then on, by a
+count that grows with the size of the feature that was mis-merged.
+
+So treat this check as a heuristic, not the authority. Confirm that everything
+it lists is either that revert or one of the mis-merged originals, and proceed
+if so — **precondition 1's content diff is what actually decides whether `main`
+has diverged.** Anything in the list that is neither is real divergence: stop
+and escalate.
 
 ### Open the PR
 
