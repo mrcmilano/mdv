@@ -1,16 +1,28 @@
 name: CI
 
+# `pull_request` is deliberate and must not become `pull_request_target`.
+# Fork PRs run untrusted code; `pull_request_target` would run that code in the
+# base repository's context with a writable token and access to secrets.
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
+# Reading the repository is all this workflow needs; every job reports through
+# its own exit status rather than writing back to the repository.
+permissions:
+  contents: read
+
 jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # dtolnay/rust-toolchain is deliberately left on a branch ref rather than
+      # SHA-pinned: the action reads github.action_ref to decide which toolchain
+      # to install, so a SHA breaks it unless `with: toolchain:` is also added.
+      # #29 will move these refs to `@1.xx.0` for MSRV anyway.
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -22,7 +34,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -34,6 +46,25 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --locked
+
+  # Single stable check-run name for branch protection to require, standing in
+  # for all seven check runs above. A matrix job's `result` is the aggregate of
+  # its legs, so three `needs:` entries cover all of them, and renaming a matrix
+  # leg cannot silently detach a required check.
+  #
+  # It does not stand in for `audit`: that job lives in a different workflow
+  # file and a `needs:` aggregate cannot span workflows, so branch protection
+  # (#30) must require `audit` as a second check by name.
+  ci-success:
+    needs: [fmt, clippy, test]
+    runs-on: ubuntu-latest
+    # `always()` is required: without it this job is skipped when a dependency
+    # fails, and a skipped required check does not block a merge.
+    if: always()
+    steps:
+      - name: Fail if any job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1

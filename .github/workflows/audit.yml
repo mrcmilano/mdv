@@ -1,23 +1,38 @@
 name: Audit
 
+# `pull_request` is deliberate and must not become `pull_request_target`.
+# Fork PRs run untrusted code; `pull_request_target` would run that code in the
+# base repository's context with a writable token and access to secrets.
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # On-demand audit, for use after a manual `cargo update` (AGENTS.md).
+  workflow_dispatch:
+
+# Reading the repository is all this workflow needs; cargo audit reports
+# through the job's exit status, not the Checks or Pull Requests APIs.
+permissions:
+  contents: read
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Check for Cargo.lock changes
         id: lockfile
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # A manual dispatch always audits — there is no base commit to
+            # diff against, and the point of dispatching is to audit now.
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             base_sha="${{ github.event.pull_request.base.sha }}"
           else
             base_sha="${{ github.event.before }}"
@@ -33,7 +48,23 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: rustsec/audit-check@v2.0.0
+      # cargo-audit is run directly rather than via rustsec/audit-check, which
+      # publishes through the Checks API and therefore needs `checks: write`.
+      # Fork PRs cap GITHUB_TOKEN at read-only regardless of any `permissions:`
+      # block, so that action would 403 on the first outside contribution that
+      # touches Cargo.lock.
+      #
+      # dtolnay/rust-toolchain is deliberately left on a branch ref rather than
+      # SHA-pinned: the action reads github.action_ref to decide which toolchain
+      # to install, so a SHA breaks it unless `with: toolchain:` is also added.
+      # #29 will move this ref to `@1.xx.0` for MSRV anyway.
+      - uses: dtolnay/rust-toolchain@stable
         if: steps.lockfile.outputs.changed == 'true'
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-audit
+        if: steps.lockfile.outputs.changed == 'true'
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        if: steps.lockfile.outputs.changed == 'true'
+        run: cargo audit --deny warnings

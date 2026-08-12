@@ -443,7 +443,7 @@ before the PR above is merged into `develop`. Ordering matters: `main` should be
 promoted only once `develop` contains the finished work, and the repo should go
 public only once `main` is the project rather than the `init` commit.
 
-- [ ] R1. **Promote `develop` → `main` via a release PR.** Not a direct push —
+- [x] R1. **Promote `develop` → `main` via a release PR.** Not a direct push —
       `docs/git-workflow.md:5` forbids committing directly to `main` or
       `develop`, and CI is configured to run on PRs targeting `main`, so the PR
       is also what gets the promotion tested.
@@ -487,10 +487,10 @@ public only once `main` is the project rather than the `init` commit.
       not constitute divergence — `git diff` between the branches stays empty
       (R2 checks the diff, deliberately, not the log). Merging `main` back into
       `develop` is **not** required.
-- [ ] R2. **Verify `main` after the merge:** `git diff origin/main origin/develop`
+- [x] R2. **Verify `main` after the merge:** `git diff origin/main origin/develop`
       is empty, `README.md` and `src/` are present on `main`, and CI on `main` is
       green.
-- [ ] R3. **Flip visibility Private → Public.** *Maintainer action — the agent
+- [x] R3. **Flip visibility Private → Public.** *Maintainer action — the agent
       does not run this.* It exposes the full repo and history to the internet
       and is not meaningfully reversible (clones, forks and caches persist).
       ```bash
@@ -500,7 +500,7 @@ public only once `main` is the project rather than the `init` commit.
       full commit history including the personal email in early commits, all
       `docs/plans/` files, `AGENTS.md` and `CLAUDE.md`. All of that was reviewed
       and accepted in #20; this is the last checkpoint, not a new decision.
-- [ ] R4. **Close #20** once R3 is done — *maintainer action*, for the same
+- [x] R4. **Close #20** once R3 is done — *maintainer action*, for the same
       reason R3 is: the agent never performs the flip, so it is never in a
       position to confirm the issue is actually complete. Then note that **#30**
       (post-launch hygiene — branch protection, topics, Discussions) is
