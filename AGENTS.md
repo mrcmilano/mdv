@@ -85,11 +85,10 @@ planning and review apparatus. The whole cost is **branch → commit → PR →
 merge**, and nothing else.
 
 There is no direct-commit path. Work reaches `main` or `develop` through a pull
-request or not at all. #30 will back this with branch protection and no bypass
-on either branch, the maintainer included; until it lands, the rule is upheld by
-following it rather than by a setting that rejects the push. So the branch and
-the PR are not ceremony to be re-litigated on a typo fix; they are the only
-mechanism there is.
+request or not at all. This is backed by branch protection with no bypass on
+either branch, the maintainer included (#30): a direct push is rejected by the
+server, not merely discouraged. So the branch and the PR are not ceremony to be
+re-litigated on a typo fix; they are the only mechanism there is.
 Everything that *is* ceremony is skipped, and both lists below are exhaustive —
 do not carry a step over from the non-trivial path by inference.
 

@@ -14,8 +14,8 @@
 - **Never commit directly to `main` or `develop`.** All work happens on a
   dedicated branch and lands through a PR — no exception for a one-line or
   documentation-only change. Branch protection with no bypass on either branch
-  (#30) is the backstop; it has not landed yet, so today the rule holds because
-  it is the rule, not because a setting rejects the push.
+  (#30) is the backstop, and it is live: a direct push to either branch is
+  rejected by the server, the maintainer included.
 - Keep commits small, atomic, and focused on a single concern.
 - Follow the Conventional Commits specification: `<type>[optional scope]: <description>`. Types: `feat:` (MINOR), `fix:` (PATCH), `BREAKING CHANGE` or `!` after type/scope (MAJOR), plus `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `hotfix:`. Use imperative mood in descriptions.
 
@@ -550,11 +550,36 @@ Check the **diff**, not the log. `main` now carries a merge commit that
 `develop` does not; that is expected, and is not divergence. Merging `main`
 back into `develop` is **not** required.
 
+> **This is why "Require branches to be up to date before merging" is
+> deliberately OFF** in the branch protection ruleset (#30), despite being
+> switched on for most repositories. That setting requires a PR's head branch to
+> contain the base branch's tip. After every promotion `develop` is behind `main`
+> by exactly the merge commit above — legitimately, per the paragraph you just
+> read — so with the setting on, **the next promotion PR would be blocked**.
+> GitHub's only offered remedy is *Update branch*, which back-merges `main` into
+> `develop`: precisely what this section says is not required, and it would put
+> promotion merge commits onto `develop` permanently, breaking the two-branch
+> model on every promotion thereafter.
+>
+> Little is given up by turning it off. Checks on a `pull_request` event already
+> run against `refs/pull/N/merge` — a simulated merge of head into base — so the
+> integration testing that setting exists to guarantee is already happening. It
+> closes only the narrow race where the base moves between a check completing and
+> the merge button being clicked.
+>
+> **Do not switch it on** without re-reading this section first.
+
 The second check exists because this repo deletes head branches automatically
 on merge, and a promotion PR's head branch is `develop` itself. GitHub skips
-protected and default branches — `main` is the default — so once branch
-protection covers `develop` (#30) the hazard lapses permanently. Until then, if
-`develop` is missing, restore it:
+protected and default branches — `main` is the default — so now that branch
+protection covers `develop` (#30), **this hazard has lapsed permanently**:
+`develop` is protected and will no longer be auto-deleted.
+
+The check and the recovery below are kept anyway. The hazard was real and fired
+exactly once, on the #41 promotion, which ran before the ruleset existed —
+`develop` was deleted and restored by hand. Keeping the check costs one command
+and would catch any future change to the protection settings. If `develop` is
+ever missing, restore it:
 
 ```bash
 # Restore from the promotion merge itself, not from whatever your local
